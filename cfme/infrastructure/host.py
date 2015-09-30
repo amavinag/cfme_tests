@@ -10,6 +10,7 @@
 from functools import partial
 
 import cfme
+from cfme.common import PolicyProfileAssignable, Taggable
 import cfme.fixtures.pytest_selenium as sel
 from cfme.web_ui.menu import nav
 import cfme.web_ui.flash as flash
@@ -151,6 +152,49 @@ class Host(Updateable, Pretty):
         self.interface_type = interface_type
         self.db_id = None
 
+    def load_details(self, refresh=False):
+        """Navigates to an Host's details page.
+
+        Args:
+            refresh: Refreshes the Host page if already there
+
+        Raises:
+            HostNotFound:
+                When unable to find the Host passed
+        """
+        if not self._on_detail_page():
+            logger.debug("load_details: not on details already")
+            sel.click(self.find_quadicon())
+        else:
+            if refresh:
+                tb.refresh()
+
+    def find_quadicon(
+            self, do_not_navigate=False, mark=False, refresh=True):
+        """Find and return a quadicon belonging to a specific Host
+
+        Returns: :py:class:`cfme.web_ui.Quadicon` instance
+        Raises: HostNotFound
+        """
+        quadicon = Quadicon(self.name, 'host')
+        if not do_not_navigate:
+            sel.force_navigate('infrastructure_hosts')
+            tb.select('Grid View')
+        elif refresh:
+            sel.refresh()
+        if not paginator.page_controls_exist():
+            raise HostNotFound("Host '{}' not found in UI!".format(self.name))
+
+        # this is causing some issues in 5.5.0.9, commenting out for a bit
+        # paginator.results_per_page(1000)
+        for page in paginator.pages():
+            if sel.is_displayed(quadicon, move_to=True):
+                if mark:
+                    sel.check(quadicon.checkbox())
+                return quadicon
+        else:
+            raise HostNotFound("Host '{}' not found in UI!".format(self.name))
+
     def _form_mapping(self, create=None, **kwargs):
         return {'name_text': kwargs.get('name'),
                 'hostname_text': kwargs.get('hostname'),
@@ -284,41 +328,6 @@ class Host(Updateable, Pretty):
         quad = Quadicon(self.name, 'host')
         return 'checkmark' in quad.creds
 
-    def _assign_unassign_policy_profiles(self, assign, *policy_profile_names):
-        """DRY function for managing policy profiles.
-
-        See :py:func:`assign_policy_profiles` and :py:func:`assign_policy_profiles`
-
-        Args:
-            assign: Wheter to assign or unassign.
-            policy_profile_names: :py:class:`str` with Policy Profile names.
-        """
-        sel.force_navigate('infrastructure_host_policy_assignment', context={'host': self})
-        for policy_profile in policy_profile_names:
-            if assign:
-                manage_policies_tree.check_node(policy_profile)
-            else:
-                manage_policies_tree.uncheck_node(policy_profile)
-        sel.click(form_buttons.save)
-
-    def assign_policy_profiles(self, *policy_profile_names):
-        """ Assign Policy Profiles to this Host.
-
-        Args:
-            policy_profile_names: :py:class:`str` with Policy Profile names. After Control/Explorer
-                coverage goes in, PolicyProfile objects will be also passable.
-        """
-        self._assign_unassign_policy_profiles(True, *policy_profile_names)
-
-    def unassign_policy_profiles(self, *policy_profile_names):
-        """ Unssign Policy Profiles to this Host.
-
-        Args:
-            policy_profile_names: :py:class:`str` with Policy Profile names. After Control/Explorer
-                coverage goes in, PolicyProfile objects will be also passable.
-        """
-        self._assign_unassign_policy_profiles(False, *policy_profile_names)
-
     def get_datastores(self):
         """ Gets list of all datastores used by this host"""
         sel.force_navigate('infrastructure_host', context={'host': self})
@@ -406,15 +415,14 @@ class Host(Updateable, Pretty):
             return False
         return True
 
+    # DEPRECATED: using the mixin class now
     def tag(self, tag, **kwargs):
         """Tags the system by given tag"""
-        sel.force_navigate('infrastructure_host', context={'host': self})
-        mixins.add_tag(tag, **kwargs)
+        return self.add_tag(tag, **kwargs)
 
     def untag(self, tag):
         """Removes the selected tag off the system"""
-        sel.force_navigate('infrastructure_host', context={'host': self})
-        mixins.remove_tag(tag)
+        return self.remove_tag(tag)
 
 
 @fill.method((Form, Host.Credential))

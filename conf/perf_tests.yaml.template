@@ -1,8 +1,144 @@
-test_queue:
-    infra_time: 28800
+##################################
+# Performance Analysis Tools
+##################################
+grafana:
+    ip_address: 1.1.1.1
+    port: 9001
+pbench:
+    disable: true
+    pbench_internal_repo_file_url: http://pbench.example.com/repo/yum.repos.d/pbench.repo
+    pbench_repo_file_url: https://copr.fedoraproject.org/coprs/ndokos/pbench/repo/epel-7/ndokos-pbench-epel-7.repo
+    configtools_repo_file_url: https://copr.fedoraproject.org/coprs/ndokos/configtools/repo/epel-7/ndokos-configtools-epel-7.repo
+##################################
+# Performance Workloads
+##################################
+workload:
+  # Ordered by difficulty in running:
+  idle:
+      total_time: 3600
+  cap_and_util:
+      total_time: 1800
+  cap_and_util_rep:
+      replication_ip: 1.1.1.1
+      total_time: 1800
+  smartstate:
+      time_between_analysis: 45
+      total_time: 1800
+  provisioning:
+      time_between_provisions: 60
+      total_time: 1800
+  all_in_one:
+      replication_ip: 1.1.1.1
+      time_between: 60
+      total_time: 1800
+##################################
+# Performance Benchmarks
+##################################
+benchmark:
+    capacity_and_utilization:
+        perf_capture: 5
+        perf_capture_timer: 5
+    discovery:
+        provider: 5
+        host: 5
+    event:
+        vmware:
+            VmPowerOn: 5
+            VmPowerOff: 5
+            VmMessage: 5
+            VmResourceReallocated: 5
+    smartstate:
+        vm: 5
+        host: 5
+    refresh:
+        provider_init: 4
+        provider_delta: 4
+        host: 4
+        vm: 4
+        # Currently only Providers with a Broker (VMware) support targeted refreshes
+        vm_targets:
+            - 1
+    refresh_broker:
+        provider_init: 4
+        provider_delta: 4
+        host: 4
+        vm: 4
+        vm_targets:
+            - 1
+            - 25
+            - 50
+            - 75
+            - 100
+    refresh_config_mgt:
+        provider_init: 4
+        provider_delta: 4
+    report:
+        iterations: 5
+        reports:
+        # Configuration Management
+            # VM reports
+            - Hardware Information for VMs
+            - Vendor and Type
+            - Vendor and Guest OS
+            - VM Location and Size
+            - VM UUIDs
+            - VMs by MAC Address
+            - User Accounts - Windows
+            - Guest OS Information - any OS
+            - Guest OS Information - Windows
+            # Host Reports
+            - Hosts Summary
+            - Host Summary with VM info
+            - Virtual Infrastructure Platforms
+            - Hardware Information
+            - Host Summary for VMs
+            - Host VM Relationships
+            - Host Network Information
+            - Host vLANs and vSwitches
+            # Providers
+            - Providers Summary
+            - Providers Hosts Relationships
+            - Providers VMs Relationships
+            # Clusters
+            - Clusters Summary
+            - Cluster Hosts Affinity
+            - Cluster VMs Affinity with Power State
+            - Cluster Resources
+            # Resource Pools
+            - Resource Pools Summary
+            # Storage
+            - Datastores Summary
+            - Datastore Summary for VMs
+            - Datastore Summary for Hosts
+            - Datastore LUN Information
+        # Migration Status
+            - Summary - VMs migration ready
+            - Detailed - VMs migration ready
+        # Relationships
+            - VM Relationships
+            - Folder to VMs Relationships
+            - Cluster Relationships
+        dashboard_widgets:
+            # Reports
+            # Next two reports cause problems with pbench due to parenthesis
+            # - Top CPU Consumers (weekly)
+            # - Top Memory Consumers (weekly)
+            - Top Storage Consumers
+            # Charts
+            - Guest OS Information
+            - Hosts - Summary by Version
+            - Vendor and Guest OS Chart
+            - Virtual Infrastructure Platforms
+            # RSS Feeds
+            - "EVM: Recently Discovered Hosts"
+            - "EVM: Recently Discovered VMs"
+##################################
+# UI Response Timing
+##################################
 ui:
     threshold:
         selenium: 60000
+        transaction: 60000
         page_render: 5000
         query_time: 1000
         query_count: 1000
