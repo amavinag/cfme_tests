@@ -44,8 +44,11 @@ host_filters = [
     re.compile(r'^GET \"\/host\/show\/[A-Za-z0-9]*\?display\=storage_adapters\"$')]
 
 vm_infra_filters = [
-    re.compile(r'^POST \"\/vm_infra\/tree_select\/\?id\=v\-[0-9]*\"$'),
-    re.compile(r'^POST \"\/vm_infra\/tree_select\/\?id\=t\-[0-9]*\"$'),
+    re.compile(r'^POST \"\/vm_infra\/tree_select\/\?id\=d\-[0-9r]*\"$'),
+    re.compile(r'^POST \"\/vm_infra\/tree_select\/\?id\=e\-[0-9r]*\"$'),
+    re.compile(r'^POST \"\/vm_infra\/tree_select\/\?id\=f\-[0-9r]*\"$'),
+    re.compile(r'^POST \"\/vm_infra\/tree_select\/\?id\=v\-[0-9r]*\"$'),
+    re.compile(r'^POST \"\/vm_infra\/tree_select\/\?id\=t\-[0-9r]*\"$'),
     re.compile(r'^POST \"\/vm_infra\/tree_select\/\?id\=ms\-[0-9]*\"$')]
 #    re.compile(r'^POST \"\/vm_infra\/accordion_select\/\?id\=[A-Za-z\_0-9]*\"$')]
 
@@ -72,7 +75,8 @@ infra_pxe_filters = [
 
 
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+# @pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+@pytest.mark.usefixtures("cfme_log_level_rails_debug")
 def test_perf_ui_infra_providers(ui_worker_pid, soft_assert):
     pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
 
@@ -88,7 +92,8 @@ def test_perf_ui_infra_providers(ui_worker_pid, soft_assert):
 
 
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+# @pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+@pytest.mark.usefixtures("cfme_log_level_rails_debug")
 def test_perf_ui_infra_clusters(ui_worker_pid, soft_assert):
     pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
 
@@ -115,7 +120,8 @@ def test_perf_ui_infra_clusters(ui_worker_pid, soft_assert):
 
 
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+# @pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+@pytest.mark.usefixtures("cfme_log_level_rails_debug")
 def test_perf_ui_infra_hosts(ui_worker_pid, soft_assert):
     pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
 
@@ -140,15 +146,20 @@ def test_perf_ui_infra_hosts(ui_worker_pid, soft_assert):
     ]
 )
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+# @pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+@pytest.mark.usefixtures("cfme_log_level_rails_debug")
 def test_perf_ui_infra_vm_explorer(ui_worker_pid, soft_assert):
     pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
+    from utils.log import logger
 
     pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, True, sel.force_navigate,
         'infrastructure_virtual_machines'), soft_assert))
 
-    infra_acc = OrderedDict((('VMs & Templates', 'vms_and_templates'), ('VMs', 'vms'),
-        ('Templates', 'templates')))
+    # infra_acc = OrderedDict((('VMs & Templates', 'vms_and_templates'), ('VMs', 'vms'),
+    #     ('Templates', 'templates')))
+    infra_acc = OrderedDict()
+    infra_acc['VMs & Templates'] = 'vms_and_templates'
+
 
     pages.extend(navigate_accordions(infra_acc, 'infrastructure_virtual_machines',
         perf_tests['ui']['page_check']['infrastructure']['vm_explorer'], ui_worker_pid, prod_tail,
@@ -161,7 +172,8 @@ def test_perf_ui_infra_vm_explorer(ui_worker_pid, soft_assert):
 # Currently unskip 1129260 since a large environment is a requirement for this bug
 @pytest.mark.meta(blockers=[BZ(1129260, unblock=True)])
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+# @pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+@pytest.mark.usefixtures("cfme_log_level_rails_debug")
 def test_perf_ui_infra_resource_pools(ui_worker_pid, soft_assert):
     pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
 
@@ -189,7 +201,8 @@ def test_perf_ui_infra_resource_pools(ui_worker_pid, soft_assert):
 
 
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+# @pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+@pytest.mark.usefixtures("cfme_log_level_rails_debug")
 def test_perf_ui_infra_datastores(ui_worker_pid, soft_assert):
     pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
 
@@ -207,7 +220,8 @@ def test_perf_ui_infra_datastores(ui_worker_pid, soft_assert):
 
 
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+# @pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+@pytest.mark.usefixtures("cfme_log_level_rails_debug")
 def test_perf_ui_infra_pxe(ui_worker_pid, soft_assert):
     pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
 

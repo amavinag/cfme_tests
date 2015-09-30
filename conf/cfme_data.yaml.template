@@ -1,5 +1,7 @@
 basic_info:
     app_version: 5.2.0
+    epel6_rpm: https://dl.fedoraproject.org/pub/epel/epel-release-latest-6.noarch.rpm
+    epel7_rpm: https://dl.fedoraproject.org/pub/epel/epel-release-latest-7.noarch.rpm
 bugzilla:
     url: http://bugzilla.example.test/xmlrpc.cgi
     loose:                  # Params of BugzillaBug to be converted to LooseVersion at runtime
@@ -124,6 +126,69 @@ management_systems:
         hostname: livingontheedge.hawkular.org
         port: 80
         credentials: hawkular
+
+    # Example Performance Providers for Workload tests
+    perf-vcsa:
+        tags:
+            - benchmark
+            - benchmark_provisioning
+            - benchmark_smartstate
+            - vmware
+        name: perf-vmware
+        default_name: Virtual Center (1.1.1.1)
+        credentials: perf_vcsim
+        hostname: 1.1.1.1
+        ipaddress: 1.1.1.1
+        server_zone: default
+        type: virtualcenter
+        version: 5.5
+        hosts:
+            - name: perf-provision.example.com
+              credentials: perfvmware_host
+              type: esxi
+        smartstate_scan_vms:
+            - perf-smartstate-rhel6
+            - perf-smartstate-rhel7
+            - perf-smartstate-windows2012
+        smartstate_scan_hosts:
+            - perf-provision.example.com
+        smartstate_scan_storage:
+            - datastore-system
+        provisioning:
+            catalog_item_type: VMware
+            datastore: datastore-system
+            host: perf-provision.example.com
+            template: perf-provision-rhel7
+      perfvcsim-small:
+          tags:
+              - benchmark
+              - benchmark_cap_and_util
+              - vmware
+          size: small
+          name: vmware-small
+          default_name: Virtual Center (1.1.1.1)
+          credentials: perf_vcsim
+          hostname: 1.1.1.1
+          ipaddress: 1.1.1.1
+          server_zone: default
+          type: virtualcenter
+          version: 5.5
+      perfrhevm36-small:
+          tags:
+              - benchmark
+              - benchmark_cap_and_util
+              - rhevm
+          size: small
+          name: rhevm-small
+          default_name: RHEV-M (1.1.1.1)
+          credentials: perf_rhevm
+          candu_credentials: perf_rhevm_candu
+          hostname: 1.1.1.1
+          ipaddress: 1.1.1.1
+          server_zone: default
+          default_cluster: Default
+          type: rhevm
+          version: 3.6
 
 
 configuration_managers:

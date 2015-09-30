@@ -49,18 +49,42 @@ def any_in(items, thing):
     return any(item in thing for item in items)
 
 
+# def generate_tree_paths(tree_contents, path, paths):
+#     if type(tree_contents) is list:
+#         for item in tree_contents:
+#             generate_tree_paths(item, path, paths)
+#     elif type(tree_contents) is tuple:
+#         path.append(tree_contents[0])
+#         generate_tree_paths(tree_contents[1], path, paths)
+#         path.pop()
+#     else:
+#         path.append(tree_contents)
+#         paths.append(list(path))
+#         path.pop()
+
+
 def generate_tree_paths(tree_contents, path, paths):
-    if type(tree_contents) is list:
-        for item in tree_contents:
+    # logger.debug('-------------------------------------')
+    # logger.debug('tree_contents: {}'.format(tree_contents))
+    # logger.debug('path: {}'.format(path))
+    # logger.debug('paths: {}'.format(paths))
+    lst_count = 0
+    for item in tree_contents:
+        # logger.debug('Item: {}, lst_count: {}'.format(item, lst_count))
+        if type(item) is list:
+            # logger.debug('list')
             generate_tree_paths(item, path, paths)
-    elif type(tree_contents) is tuple:
-        path.append(tree_contents[0])
-        generate_tree_paths(tree_contents[1], path, paths)
+        else:
+            # logger.debug('string')
+            if lst_count >= 1 and len(path) >= 1:
+                path.pop()
+            path.append(item)
+            lst_count += 1
+            # logger.debug('Appending Path: {}'.format(path))
+            paths.append(list(path))
+    if len(path) >= 1:
         path.pop()
-    else:
-        path.append(tree_contents)
-        paths.append(list(path))
-        path.pop()
+
 
 
 def navigate_accordions(accordions, page_name, ui_bench_pg_limit, ui_worker_pid, prod_tail,
@@ -85,9 +109,9 @@ def navigate_accordions(accordions, page_name, ui_bench_pg_limit, ui_worker_pid,
 
         paths = []
         generate_tree_paths(tree_contents, [], paths)
-        logger.info('Found %s tree paths', len(paths))
+        # logger.debug('Number of Paths: {} :: {}'.format(len(paths), paths))
         for path in paths:
-            logger.info('Navigating to: %s, %s', acc_tree, path[-1])
+            logger.debug('Navigating to: {}, {}'.format(acc_tree, path[-1]))
             try:
                 pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, True,
                     accordion.tree(acc_tree).click_path, *path), soft_assert))
@@ -99,7 +123,8 @@ def navigate_accordions(accordions, page_name, ui_bench_pg_limit, ui_worker_pid,
                     pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, False,
                         sel.force_navigate, page_name), soft_assert))
             except CandidateNotFound:
-                logger.info('Could not navigate to: %s', path[-1])
+                logger.info('Could not navigate to: {}'.format(path[-1]))
+                logger.error('Entire Path: {}'.format(path))
             except UnexpectedAlertPresentException:
                 logger.warning('UnexpectedAlertPresentException - page_name: %s, accordion: %s,'
                     ' path: %s', page_name, acc_tree, path[-1])
