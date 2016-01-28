@@ -201,7 +201,8 @@ def templates_to_test(api, limit=1):
         name = pt['template']['name']
         group = pt['template']['group']['name']
         provider = pt['provider']['key']
-        templates.append([name, provider, group])
+        request_type = pt['provider']['type']
+        templates.append([name, provider, group, request_type])
     return templates
 
 
