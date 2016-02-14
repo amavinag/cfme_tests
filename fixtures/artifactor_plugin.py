@@ -42,11 +42,7 @@ for cred in credentials:
 
 
 def get_test_idents(item):
-
-    if getattr(item, 'location', None):
-        return item.location[2], item.location[0]
-    else:
-        return item.name, item.parent.name
+    return item.location[2], item.location[0]
 
 
 class DummyClient(object):
@@ -125,7 +121,7 @@ def pytest_runtest_protocol(item):
         session_build = store.current_appliance.build
         session_stream = store.current_appliance.version.stream()
         art_client.fire_hook('session_info', version=session_ver, build=session_build,
-            stream=session_stream, grab_result=True)
+            stream=session_stream)
 
     name, location = get_test_idents(item)
     # This pre_start_test hook is needed so that filedump is able to make get the test
@@ -141,7 +137,7 @@ def pytest_runtest_protocol(item):
 def pytest_runtest_teardown(item, nextitem):
     name, location = get_test_idents(item)
     art_client.fire_hook('finish_test', test_location=location, test_name=name,
-                         slaveid=SLAVEID, ip=appliance_ip_address)
+                         slaveid=SLAVEID, ip=appliance_ip_address, grab_result=True)
     art_client.fire_hook('sanitize', test_location=location, test_name=name, words=words)
     art_client.fire_hook('ostriz_send', test_location=location, test_name=name,
                          slaveid=SLAVEID,)

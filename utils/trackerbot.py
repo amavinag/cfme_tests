@@ -3,6 +3,7 @@ import re
 import urlparse
 from collections import defaultdict, namedtuple
 from datetime import date
+import urllib
 
 import slumber
 import requests
@@ -189,15 +190,19 @@ def latest_template(api, group, provider_key=None):
         return response['latest_templates'][group['name']]
 
 
-def templates_to_test(api, limit=1):
+def templates_to_test(api, limit=1, request_type=None):
     """get untested templates to pass to jenkins
 
     Args:
         limit: max number of templates to pull per request
+        request_type: request the provider_key of specific type
+        e.g openstack
 
     """
     templates = []
-    for pt in api.untestedtemplate.get(limit=limit, tested=False).get('objects', []):
+    for pt in api.untestedtemplate.get(
+            limit=limit, tested=False, provider__type=request_type).get(
+            'objects', []):
         name = pt['template']['name']
         group = pt['template']['group']['name']
         provider = pt['provider']['key']
@@ -274,9 +279,9 @@ def depaginate(api, result):
 def composite_uncollect(build):
     """Composite build function"""
 
-    url = "{}{}".format(conf['ostriz'], build)
+    url = "{}?build={}&source=jenkins".format(conf['ostriz'], urllib.quote(build))
     try:
-        resp = requests.get(url, timeout=3)
+        resp = requests.get(url, timeout=10)
         return resp.json()
     except Exception as e:
         print e

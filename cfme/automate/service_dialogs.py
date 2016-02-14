@@ -23,7 +23,8 @@ dynamic_tree = Tree({version.LOWEST: "//div[@class='dhxcont_global_content_area'
                                      "/fieldset/div/ul[@class='dynatree-container']",
                     '5.4': "//div[@class='dhxcont_global_content_area']"
                            "[not(contains(@style, 'display: none'))]/div/div/div/div/div/div"
-                           "/div/div/div/ul[@class='dynatree-container']"})
+                           "/div/div/div/ul[@class='dynatree-container']",
+                    '5.5': "//div[@class='modal-content']/div/div/ul[@class='dynatree-container']"})
 
 label_form = Form(fields=[
     ('label', Input("label")),
@@ -178,8 +179,11 @@ class ServiceDialog(Updateable, Pretty):
             text_area_table.click_cell(1, value="Default text")
 
     def element(self, element_data):
-        return sel.element('//div[@class="modbox"]/h2[@class="modtitle"]'
-                          '[contains(normalize-space(.), "{}")]/..'.format(element_data))
+        return sel.element(version.pick({
+            '5.5': '//div[@class="panel-heading"]/h3[@class="panel-title"]'
+            '[contains(normalize-space(.), "{}")]/..'.format(element_data),
+            '5.4': '//div[@class="modbox"]/h2[@class="modtitle"]'
+            '[contains(normalize-space(.), "{}")]/..'.format(element_data)}))
 
     def reorder_elements(self, tab, box, *element_data):
         sel.force_navigate('service_dialog_edit', context={'dialog': self})
