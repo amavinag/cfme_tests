@@ -28,6 +28,7 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.remote.file_detector import LocalFileDetector, UselessFileDetector
 from selenium.webdriver.remote.webelement import WebElement
 from selenium.webdriver.support.select import Select as SeleniumSelect
 from multimethods import singledispatch, multidispatch
@@ -80,6 +81,9 @@ class ByValue(Pretty):
 
     def __eq__(self, other):
         return self.value == other.value
+
+    def __str__(self):
+        return str(self.value)
 
 
 class ByText(Pretty):
@@ -442,12 +446,6 @@ def wait_for_element(*locs, **kwargs):
     )
 
 
-def on_cfme_page():
-    """Check whether we are on a CFME page and not another or blank page"""
-    return (is_displayed("//div[@id='page_header_div']//div[contains(@class, 'brand')]")
-        and is_displayed("//div[@id='footer']")) or is_displayed("//ul[@class='login_buttons']")
-
-
 def get_alert():
     return browser().switch_to_alert()
 
@@ -754,15 +752,32 @@ def set_angularjs_value(loc, value):
 
 
 def send_keys(loc, text):
-    """
-    Sends the supplied keys to an element.
+    """Sends the supplied keys to an element. Handles the file upload fields on background.
+
+    If it detects the element is and input of type file, it uses the LocalFileDetector so
+    the file gets transferred properly. Otherwise it takes care of having UselessFileDetector.
 
     Args:
         loc: A locator, expects either a string, WebElement, tuple.
         text: The text to inject into the element.
     """
     if text is not None:
-        move_to_element(loc).send_keys(text)
+        file_intercept = False
+        # If the element is input type file, we will need to use the file detector
+        if tag(loc) == 'input':
+            type_attr = get_attribute(loc, 'type')
+            if type_attr and type_attr.strip() == 'file':
+                file_intercept = True
+        try:
+            if file_intercept:
+                # If we detected a file upload field, let's use the file detector.
+                browser().file_detector = LocalFileDetector()
+            move_to_element(loc).send_keys(text)
+        finally:
+            # Always the UselessFileDetector for all other kinds of fields, so do not leave
+            # the LocalFileDetector there.
+            if file_intercept:
+                browser().file_detector = UselessFileDetector()
         wait_for_ajax()
 
 
@@ -813,19 +828,6 @@ def uncheck(loc):
     return checkbox(loc, False)
 
 
-def multi_check(locators):
-    """ Mass-check and uncheck for checkboxes.
-
-    Args:
-        locators: :py:class:`dict` or :py:class:`list` or whatever iterable of tuples.
-            Key is the locator, value bool with check status.
-
-    Returns: list of booleans indicating for each locator, whether any action was taken.
-
-    """
-    return [checkbox(locator, checked) for locator, checked in dict(locators).iteritems()]
-
-
 def current_url():
     """
     Returns the current_url of the page
@@ -855,59 +857,6 @@ def refresh():
     """
     browser().refresh()
 
-
-def move_to_fn(*els):
-    """
-    Returns a function which successively moves through a series of elements.
-
-    Args:
-        els: An iterable of elements:
-    Returns: The move function
-    """
-    def f(_):
-        for el in els:
-            move_to_element(el)
-    return f
-
-
-def click_fn(*els):
-    """
-    Returns a function which successively clicks on a series of elements.
-
-    Args:
-       els: An iterable of elements:
-    Returns: The click function
-    """
-    def f(_):
-        for el in els:
-            click(el)
-    return f
-
-
-def first_from(*locs, **kwargs):
-    """ Goes through locators and first valid element received is returned.
-
-    Useful for things that could be located different way
-
-    Args:
-        *locs: Locators to pass through
-        **kwargs: Keyword arguments to pass to element()
-
-    Raises:
-        NoSuchElementException: When none of the locator could find the element.
-
-    Returns: :py:class:`WebElement`
-
-    """
-    assert len(locs) > 0, "You must provide at least one locator to look for!"
-    for locator in locs:
-        try:
-            return element(locator, **kwargs)
-        except NoSuchElementException:
-            pass
-    # To make nice error
-    msg = locs[0] if len(locs) == 1 else ("%s or %s" % (", ".join(locs[:-1]), locs[-1]))
-    raise NoSuchElementException("Could not find element with possible locators %s." % msg)
 
 # Begin CFME specific stuff, should eventually factor
 # out everything above into a lib
@@ -1273,7 +1222,6 @@ def detect_observed_field(loc):
     wait_for_ajax()
 
 
-@singledispatch
 def set_text(loc, text):
     """
     Clears the element and then sends the supplied keys.
