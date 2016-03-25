@@ -28,6 +28,10 @@ def pytest_runtest_setup(item):
         utils.browser.ensure_browser_open()
 
 
+def pytest_runtest_teardown(item):
+    utils.browser.quit()
+
+
 def pytest_exception_interact(node, call, report):
     from fixtures.artifactor_plugin import SLAVEID
     name, location = get_test_idents(node)
@@ -110,5 +114,5 @@ def browser():
 def nuke_browser_after_test():
     """Some more disruptive tests have to take this measure."""
     yield
-    pytest.sel.quit()
     pytest.sel.ensure_browser_open()
+    pytest.sel.quit()
