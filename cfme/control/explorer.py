@@ -11,7 +11,7 @@ from cfme.web_ui import Region, Form, Tree, CheckboxTree, Table, Select, EmailSe
     CheckboxSelect, Input, AngularSelect
 from cfme.web_ui.multibox import MultiBoxSelect
 from selenium.common.exceptions import NoSuchElementException
-from utils import version
+from utils import version, deferred_verpick
 from utils.db import cfmedb
 from utils.log import logger
 from utils.update import Updateable
@@ -54,9 +54,9 @@ def _ap_single_branch(ugly, nice):
 def _ap_multi_branch(ugly, nice):
     """Generates branch for listing and adding the profiles"""
     return [
-        accordion_func(
+        lambda ctx: accordion_func(
             "Alert Profiles", "All Alert Profiles", "{} Alert Profiles".format(
-                version.pick(nice) if isinstance(nice, dict) else nice)),
+                version.pick(nice) if isinstance(nice, dict) else nice))(),
         {
             "{}_alert_profile_new".format(ugly):
             lambda _: cfg_btn("Add a New {} Alert Profile".format(
@@ -74,7 +74,7 @@ def accordion_func(accordion_title, *nodes):
         accordion_title: Text on accordion.
         *nodes: Nodes to click through.
     """
-    def f(_):
+    def f(_=None):
         try:
             accordion.tree(accordion_title, *nodes)
         except NoSuchElementException:
@@ -295,6 +295,7 @@ nav.add_branch(
         [
             lambda ctx: accordion_func(
                 "Conditions", "All Conditions",
+                # TODO: This needs to be replace with a deferred call
                 version.pick({
                     version.LOWEST: "VM Conditions",
                     "5.4": "All VM and Instance Conditions"}),
@@ -316,10 +317,10 @@ nav.add_branch(
 
         "vm_conditions":
         [
-            accordion_func("Conditions", "All Conditions",
+            lambda ctx: accordion_func("Conditions", "All Conditions",
                 version.pick({
                     version.LOWEST: "VM Conditions",
-                    "5.4": "All VM and Instance Conditions"})),
+                    "5.4": "All VM and Instance Conditions"}))(None),
             {
                 "vm_condition_new":
                 lambda _: cfg_btn(version.pick({
@@ -469,8 +470,8 @@ class BaseCondition(Updateable, Pretty):
                  scope=None,
                  expression=None):
         if not self.PREFIX:
-            raise NotImplementedError("You must use an inherited class from %s"
-                                      % self.__class__.__name__)
+            raise NotImplementedError("You must use an inherited class from {}".format(
+                self.__class__.__name__))
         self.description = description
         self.notes = notes
         self.scope = scope
@@ -525,13 +526,10 @@ class VMCondition(BaseCondition, VMObject):
 
 class HostCondition(BaseCondition, HostObject):
     PREFIX = "host_"
-
-    @property
-    def DELETE_STRING(self):
-        if version.current_version() >= "5.4":
-            return "Delete this Host / Node Condition"
-        else:
-            return "Delete this Host Condition"
+    DELETE_STRING = deferred_verpick({
+        version.LOWEST: "Delete this Host Condition",
+        '5.4': "Delete this Host / Node Condition"
+    })
 
 
 class BasePolicy(Updateable, Pretty):
@@ -598,8 +596,8 @@ class BasePolicy(Updateable, Pretty):
                  notes=None,
                  scope=None):
         if not self.PREFIX:
-            raise NotImplementedError("You must use an inherited class from %s"
-                                      % self.__class__.__name__)
+            raise NotImplementedError("You must use an inherited class from {}".format(
+                self.__class__.__name__))
         self.description = description
         self.notes = notes
         self.active = active
@@ -683,16 +681,15 @@ class BasePolicy(Updateable, Pretty):
                     raise TypeError("You cannot add VM object to Host and vice versa!")
                 # Assign condition.description
                 logger.debug(
-                    "Assigning condition `%s` to policy `%s`" % (condition.description,
-                                                                 self.description))
+                    "Assigning condition `%s` to policy `%s`",
+                    condition.description, self.description)
                 if not condition.exists:
                     condition.create()
                 assign_names.append(condition.description)
             elif isinstance(condition, basestring):
                 # assign condition
                 logger.debug(
-                    "Assigning condition `%s` to policy `%s`" % (condition,
-                                                                 self.description))
+                    "Assigning condition `%s` to policy `%s`", condition, self.description)
                 assign_names.append(condition)
             else:
                 raise TypeError("assign_conditions() accepts only BaseCondition and basestring")
@@ -775,14 +772,14 @@ class BasePolicy(Updateable, Pretty):
             if isinstance(action, Action):
                 if not action.exists:
                     action.create()
-                    assert action.exists, "Could not create action %s!" % action.description
+                    assert action.exists, "Could not create action {}!".format(action.description)
             else:  # string
                 if not Action(action, "Tag").exists:
-                    raise NameError("Action with name %s does not exist!" % action)
+                    raise NameError("Action with name {} does not exist!".format(action))
         # Check whether we have all necessary events assigned
         if not self.is_event_assigned(event):
             self.assign_events(event, do_not_uncheck=True)
-            assert self.is_event_assigned(event), "Could not assign event %s!" % event
+            assert self.is_event_assigned(event), "Could not assign event {}!".format(event)
         # And now we can assign actions
         sel.force_navigate(self.PREFIX + "policy_event_actions",
                            context=dict(policy_name=self.description, event_name=event))
@@ -821,19 +818,15 @@ class BaseControlPolicy(BasePolicy):
 class HostCompliancePolicy(BasePolicy, HostObject):
     PREFIX = "host_compliance_"
 
-    @property
-    def DELETE_STRING(self):
-        if version.current_version() >= "5.4":
-            return "Delete this Host / Node Policy"
-        else:
-            return "Delete this Host Policy"
+    DELETE_STRING = deferred_verpick({
+        version.LOWEST: "Delete this Host Policy",
+        "5.4": "Delete this Host / Node Policy"
+    })
 
-    @property
-    def COPY_STRING(self):
-        if version.current_version() >= "5.4":
-            return "Copy this Host / Node Policy"
-        else:
-            return "Copy this Host Policy"
+    COPY_STRING = deferred_verpick({
+        version.LOWEST: "Copy this Host Policy",
+        "5.4": "Copy this Host / Node Policy"
+    })
 
     def __str__(self):
         if version.current_version() >= "5.4":
@@ -854,19 +847,15 @@ class VMCompliancePolicy(BasePolicy, VMObject):
 class HostControlPolicy(BaseControlPolicy, HostObject):
     PREFIX = "host_control_"
 
-    @property
-    def DELETE_STRING(self):
-        if version.current_version() >= "5.4":
-            return "Delete this Host / Node Policy"
-        else:
-            return "Delete this Host Policy"
+    DELETE_STRING = deferred_verpick({
+        version.LOWEST: "Delete this Host Policy",
+        "5.4": "Delete this Host / Node Policy"
+    })
 
-    @property
-    def COPY_STRING(self):
-        if version.current_version() >= "5.4":
-            return "Copy this Host / Node Policy"
-        else:
-            return "Copy this Host Policy"
+    COPY_STRING = deferred_verpick({
+        version.LOWEST: "Copy this Host Policy",
+        "5.4": "Copy this Host / Node Policy"
+    })
 
     def __str__(self):
         if version.current_version() >= "5.4":
@@ -1300,7 +1289,8 @@ class Action(Updateable, Pretty):
     pretty_attrs = ['description', 'action_type', 'action_values']
 
     def __init__(self, description, action_type, action_values=None):
-        assert action_type in self.sub_forms.keys(), "Unrecognized Action Type (%s)" % action_type
+        assert action_type in self.sub_forms.keys(), "Unrecognized Action Type ({})".format(
+            action_type)
         self.description = description
         self.action_type = action_type
         self.action_values = action_values or self._default_values
@@ -1360,8 +1350,8 @@ class Action(Updateable, Pretty):
 
         if "action_type" in updates and updates["action_type"] != self.action_type:
             action_type = updates["action_type"]
-            logger.debug("Changing action_type for Action %s" % self.description)
-            assert action_type in self.sub_forms.keys(), "Unk. Action Type (%s)" % action_type
+            logger.debug("Changing action_type for Action %s", self.description)
+            assert action_type in self.sub_forms.keys(), "Unk. Action Type ({})".format(action_type)
             self.action_type = action_type
             self.action_values = self._default_values
         if "action_values" in updates:
@@ -1447,7 +1437,7 @@ class PolicyProfile(Updateable, Pretty):
             if isinstance(policy, BasePolicy):
                 if not policy.exists:
                     policy.create()
-                    assert policy.exists, "Unable to create a policy %s!" % str(policy)
+                    assert policy.exists, "Unable to create a policy {}!".format(str(policy))
             policy_list.append(str(policy))
         sel.force_navigate("policy_profile_new")
         fill(
@@ -1475,7 +1465,7 @@ class PolicyProfile(Updateable, Pretty):
                 if isinstance(policy, BasePolicy):
                     if not policy.exists:
                         policy.create()
-                        assert policy.exists, "Unable to create a policy %s!" % str(policy)
+                        assert policy.exists, "Unable to create a policy {}!".format(str(policy))
                 policy_list.append(str(policy))
         if "notes" in updates:
             self.notes = updates["notes"]
@@ -1606,7 +1596,7 @@ class BaseAlertProfile(Updateable, Pretty):
             if isinstance(alert, Alert) and not alert.exists:
                 alert.create()
                 assert alert.exists, "Could not create an Alert!"
-        sel.force_navigate("%s_alert_profile_new" % self.PREFIX)
+        sel.force_navigate("{}_alert_profile_new".format(self.PREFIX))
         fill(self.form, dict(
             description=self.description,
             notes=self.notes,
@@ -1636,7 +1626,7 @@ class BaseAlertProfile(Updateable, Pretty):
                     assert alert.exists, "Could not create an Alert!"
         if "notes" in updates:
             self.notes = updates["notes"]
-        sel.force_navigate("%s_alert_profile_edit" % self.PREFIX,
+        sel.force_navigate("{}_alert_profile_edit".format(self.PREFIX),
                            context={"alert_profile_name": self.description})
         fill(self.form, dict(
             description=self.description,
@@ -1655,7 +1645,7 @@ class BaseAlertProfile(Updateable, Pretty):
         Args:
             cancel: Whether to cancel the operation.
         """
-        sel.force_navigate("%s_alert_profile" % self.PREFIX,
+        sel.force_navigate("{}_alert_profile".format(self.PREFIX),
                            context={"alert_profile_name": self.description})
         cfg_btn("Delete this Alert Profile", invokes_alert=True)
         sel.handle_alert(cancel)
@@ -1669,7 +1659,7 @@ class BaseAlertProfile(Updateable, Pretty):
             selections: What items to check in the tree. N/A for The Enteprise.
             tag_category: Only for choices starting with Tagged. N/A for The Enterprise.
         """
-        sel.force_navigate("%s_alert_profile_assignments" % self.PREFIX,
+        sel.force_navigate("{}_alert_profile_assignments".format(self.PREFIX),
                            context={"alert_profile_name": self.description})
         fill(self.assignments, dict(assign=assign))
         if selections or tag_category:

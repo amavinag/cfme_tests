@@ -17,7 +17,7 @@ from utils.wait import wait_for
 pytestmark = [
     pytest.mark.usefixtures("logged_in"),
     pytest.mark.meta(server_roles="+automate"),
-    pytest.mark.ignore_stream("5.2", "5.3", "upstream")
+    pytest.mark.ignore_stream("upstream")
 ]
 
 METHOD_TORSO = """
@@ -137,8 +137,9 @@ def test_provision_stack(setup_provider, provider, provisioning, dialog, catalog
         test_flag: provision
     """
     dialog_name, template = dialog
+    template.delete_all_templates()
     method = METHOD_TORSO.replace('"Description" : "AWS',
-                                  '"Description" : "Aamzon')
+                                  '"Description" : "Amazon')
     template.create(method)
     template.create_service_dialog_from_template(dialog_name, template.template_name)
 
@@ -154,12 +155,13 @@ def test_provision_stack(setup_provider, provider, provisioning, dialog, catalog
     @request.addfinalizer
     def _cleanup_vms():
         if provider.mgmt.stack_exist(stackname):
-            provider.mgmt.delete_stack(stackname)
+            wait_for(lambda: provider.mgmt.delete_stack(stackname),
+             delay=10, num_sec=800, message="wait for stack delete")
         template.delete_all_templates()
 
     service_catalogs = ServiceCatalogs("service_name", stack_data)
     service_catalogs.order_stack_item(catalog.name, catalog_item)
-    logger.info('Waiting for cfme provision request for service %s' % item_name)
+    logger.info('Waiting for cfme provision request for service %s', item_name)
     row_description = item_name
     cells = {'Description': row_description}
     row, __ = wait_for(requests.wait_for_request, [cells, True],
@@ -167,7 +169,7 @@ def test_provision_stack(setup_provider, provider, provisioning, dialog, catalog
     assert row.last_message.text == 'Service Provisioned Successfully'
 
 
-@pytest.mark.uncollectif(lambda: version.current_version() < '5.5')
+@pytest.mark.uncollectif(lambda: version.current_version() <= '5.5')
 def test_reconfigure_service(setup_provider, provider, provisioning, dialog, catalog, request):
     """Tests stack provisioning
 
@@ -176,7 +178,7 @@ def test_reconfigure_service(setup_provider, provider, provisioning, dialog, cat
     """
     dialog_name, template = dialog
     method = METHOD_TORSO.replace('"Description" : "AWS',
-                                  '"Description" : "Aamzon Web')
+                                  '"Description" : "Amzn Web')
     template.create(method)
     template.create_service_dialog_from_template(dialog_name, template.template_name)
 
@@ -192,12 +194,13 @@ def test_reconfigure_service(setup_provider, provider, provisioning, dialog, cat
     @request.addfinalizer
     def _cleanup_vms():
         if provider.mgmt.stack_exist(stackname):
-            provider.mgmt.delete_stack(stackname)
+            wait_for(lambda: provider.mgmt.delete_stack(stackname),
+             delay=10, num_sec=800, message="wait for stack delete")
         template.delete_all_templates()
 
     service_catalogs = ServiceCatalogs("service_name", stack_data)
     service_catalogs.order_stack_item(catalog.name, catalog_item)
-    logger.info('Waiting for cfme provision request for service %s' % item_name)
+    logger.info('Waiting for cfme provision request for service %s', item_name)
     row_description = item_name
     cells = {'Description': row_description}
     row, __ = wait_for(requests.wait_for_request, [cells, True],
@@ -216,7 +219,7 @@ def test_remove_template_provisioning(setup_provider, provider, provisioning,
     """
     dialog_name, template = dialog
     method = METHOD_TORSO.replace('"Description" : "AWS',
-                                  '"Description" : "Aamzon Web Services')
+                                  '"Description" : "Amzn Web Services')
     template.create(method)
     template.create_service_dialog_from_template(dialog_name, template.template_name)
 
@@ -251,7 +254,7 @@ def test_retire_stack(setup_provider, provider, provisioning,
     set_default_view("Stacks", "Grid View")
     dialog_name, template = dialog
     method = METHOD_TORSO.replace('"Description" : "AWS',
-                                  '"Description" : "Aamzon Web Services desc')
+                                  '"Description" : "Amzn Web Services desc')
     template.create(method)
     template.create_service_dialog_from_template(dialog_name, template.template_name)
 
@@ -267,7 +270,7 @@ def test_retire_stack(setup_provider, provider, provisioning,
     service_catalogs = ServiceCatalogs("service_name", stack_data)
     service_catalogs.order_stack_item(catalog.name, catalog_item)
     request.addfinalizer(lambda: template.delete_all_templates())
-    logger.info('Waiting for cfme provision request for service %s' % item_name)
+    logger.info('Waiting for cfme provision request for service %s', item_name)
     row_description = item_name
     cells = {'Description': row_description}
     row, __ = wait_for(requests.wait_for_request, [cells, True],
@@ -275,3 +278,7 @@ def test_retire_stack(setup_provider, provider, provisioning,
     assert row.last_message.text == 'Service Provisioned Successfully'
     stack = Stack(stackname)
     stack.retire_stack()
+
+    @request.addfinalizer
+    def _cleanup_templates():
+        template.delete_all_templates()

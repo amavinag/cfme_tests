@@ -16,6 +16,8 @@ Required YAML keys:
 import fauxfactory
 import pytest
 
+import mgmtsystem
+
 from cfme.common.vm import VM
 from cfme.control import explorer
 from cfme.configure import tasks
@@ -24,10 +26,9 @@ from cfme.web_ui import tabstrip as tabs, toolbar as tb
 from datetime import datetime
 from fixtures.pytest_store import store
 from functools import partial
-from utils import mgmt_system, testgen
+from utils import testgen
 from utils.blockers import BZ
 from utils.conf import cfme_data
-from utils.db import cfmedb
 from utils.log import logger
 from utils.miq_soap import MiqVM
 from utils.version import current_version
@@ -93,7 +94,7 @@ pytestmark = [
     pytest.mark.meta(blockers=[
         BZ(
             1149128,
-            unblock=lambda provider: not isinstance(provider.mgmt, mgmt_system.SCVMMSystem))
+            unblock=lambda provider: not isinstance(provider.mgmt, mgmtsystem.scvmm.SCVMMSystem))
     ])
 ]
 
@@ -108,8 +109,8 @@ def get_vm_object(vm_name):
         If not, `None`
     """
     if current_version() < "5.5":
-        vm_table = cfmedb()['vms']
-        for vm in cfmedb().session.query(vm_table.name, vm_table.guid)\
+        vm_table = store.current_appliance.db['vms']
+        for vm in store.current_appliance.db.session.query(vm_table.name, vm_table.guid)\
                 .filter(vm_table.template == False):  # NOQA
             # Previous line is ok, if you change it to `is`, it won't work!
             if vm.name == vm_name:
@@ -196,7 +197,7 @@ def vm(request, provider, local_setup_provider, small_template, vm_name):
         try:
             provider.mgmt.delete_vm(vm_name)
         except TimedOutError:
-            logger.warning("Could not delete VM {}!".format(vm_name))
+            logger.warning("Could not delete VM %s!", vm_name)
         finally:
             # If this happened, we should skip all tests from this provider in this module
             pytest.skip("{} is quite likely overloaded! Check its status!\n{}: {}".format(
@@ -205,15 +206,15 @@ def vm(request, provider, local_setup_provider, small_template, vm_name):
     @request.addfinalizer
     def _finalize():
         """if getting REST object failed, we would not get the VM deleted! So explicit teardown."""
-        logger.info("Shutting down VM with name {}".format(vm_name))
+        logger.info("Shutting down VM with name %s", vm_name)
         if provider.mgmt.is_vm_suspended(vm_name):
-            logger.info("Powering up VM {} to shut it down correctly.".format(vm_name))
+            logger.info("Powering up VM %s to shut it down correctly.", vm_name)
             provider.mgmt.start_vm(vm_name)
         if provider.mgmt.is_vm_running(vm_name):
-            logger.info("Powering off VM {}".format(vm_name))
+            logger.info("Powering off VM %s", vm_name)
             provider.mgmt.stop_vm(vm_name)
         if provider.mgmt.does_vm_exist(vm_name):
-            logger.info("Deleting VM {} in {}".format(vm_name, provider.mgmt.__class__.__name__))
+            logger.info("Deleting VM %s in %s", vm_name, provider.mgmt.__class__.__name__)
             provider.mgmt.delete_vm(vm_name)
 
     # Make it appear in the provider
@@ -349,7 +350,7 @@ def test_action_start_virtual_machine_after_stopping(
     try:
         wait_for(vm.is_vm_running, num_sec=600, delay=5)
     except TimedOutError:
-        pytest.fail("CFME did not power on the VM %s" % vm.name)
+        pytest.fail("CFME did not power on the VM {}".format(vm.name))
 
 
 def test_action_stop_virtual_machine_after_starting(
@@ -373,7 +374,7 @@ def test_action_stop_virtual_machine_after_starting(
     try:
         wait_for(vm.is_vm_stopped, num_sec=600, delay=5)
     except TimedOutError:
-        pytest.fail("CFME did not power off the VM %s" % vm.name)
+        pytest.fail("CFME did not power off the VM {}".format(vm.name))
 
 
 def test_action_suspend_virtual_machine_after_starting(
@@ -396,7 +397,7 @@ def test_action_suspend_virtual_machine_after_starting(
     try:
         wait_for(vm.is_vm_suspended, num_sec=600, delay=5)
     except TimedOutError:
-        pytest.fail("CFME did not suspend the VM %s" % vm.name)
+        pytest.fail("CFME did not suspend the VM {}".format(vm.name))
 
 
 @pytest.mark.meta(blockers=[1142875])
@@ -422,7 +423,7 @@ def test_action_prevent_event(request, assign_policy_for_testing, vm, vm_off, vm
     except TimedOutError:
         pass  # VM did not start, so that's what we want
     else:
-        pytest.fail("CFME did not prevent starting of the VM %s" % vm.name)
+        pytest.fail("CFME did not prevent starting of the VM {}".format(vm.name))
 
 
 def test_action_power_on_logged(
@@ -446,18 +447,16 @@ def test_action_power_on_logged(
     # Search the logs
     def search_logs():
         rc, stdout = ssh_client.run_command(
-            "cat /var/www/miq/vmdb/log/policy.log | grep '%s'" % policy_desc
-        )
+            "cat /var/www/miq/vmdb/log/policy.log | grep '{}'".format(policy_desc))
         if rc != 0:  # Nothing found, so shortcut
             return False
         for line in stdout.strip().split("\n"):
             if "Policy success" not in line:
                 continue
-            match_string = "policy: [%s], event: [VM Power On], entity name: [%s]" % (
-                assign_policy_for_testing.description, vm.name
-            )
+            match_string = "policy: [{}], event: [VM Power On], entity name: [{}]".format(
+                assign_policy_for_testing.description, vm.name)
             if match_string in line:
-                logger.info("Found corresponding log message: %s" % line.strip())
+                logger.info("Found corresponding log message: %s", line.strip())
                 return True
         else:
             return False
@@ -485,16 +484,16 @@ def test_action_power_on_audit(
     # Search the logs
     def search_logs():
         rc, stdout = ssh_client.run_command(
-            "cat /var/www/miq/vmdb/log/audit.log | grep '%s'" % policy_desc
+            "cat /var/www/miq/vmdb/log/audit.log | grep '{}'".format(policy_desc)
         )
         if rc != 0:  # Nothing found, so shortcut
             return False
         for line in stdout.strip().split("\n"):
             if "Policy success" not in line or "MiqAction.action_audit" not in line:
                 continue
-            match_string = "policy: [%s], event: [VM Power On]" % (policy_desc)
+            match_string = "policy: [{}], event: [VM Power On]".format(policy_desc)
             if match_string in line:
-                logger.info("Found corresponding log message: %s" % line.strip())
+                logger.info("Found corresponding log message: %s", line.strip())
                 return True
         else:
             return False
@@ -609,7 +608,7 @@ def test_action_initiate_smartstate_analysis(
         test_flag: actions, provision
     """
     # Set host credentials for VMWare
-    if isinstance(vm.provider, mgmt_system.VMWareSystem):
+    if isinstance(vm.provider, mgmtsystem.virtualcenter.VMWareSystem):
         set_host_credentials(request, vm.provider, vm)
 
     # Set up the policy and prepare finalizer
@@ -631,7 +630,7 @@ def test_action_initiate_smartstate_analysis(
     try:
         wait_for(wait_analysis_tried, num_sec=360, message="wait for analysis attempt", delay=5)
     except TimedOutError:
-        pytest.fail("CFME did not even try analysing the VM %s" % vm.name)
+        pytest.fail("CFME did not even try analysing the VM {}".format(vm.name))
 
     # Check that analyse job has appeared in the list
     # Wait for the task to finish
@@ -660,7 +659,7 @@ def test_action_initiate_smartstate_analysis(
         wait_for(wait_analysis_finished, num_sec=600,
                  message="wait for analysis finished", delay=60)
     except TimedOutError:
-        pytest.fail("CFME did not finish analysing the VM %s" % vm.name)
+        pytest.fail("CFME did not finish analysing the VM {}".format(vm.name))
 
 
 # TODO: Get the id other way than from SOAP.
@@ -686,7 +685,7 @@ def test_action_raise_automation_event(
     def search_logs():
         rc, stdout = ssh_client.run_command(
             "cat /var/www/miq/vmdb/log/automation.log | grep 'MiqAeEvent.build_evm_event' |"
-            " grep 'event=<\"vm_poweroff\">' | grep 'id: %s'" % vm.api.object.id
+            " grep 'event=<\"vm_poweroff\">' | grep 'id: {}'".format(vm.api.object.id)
             # not guid, but the ID
         )
         if rc != 0:  # Nothing found, so shortcut
@@ -695,7 +694,7 @@ def test_action_raise_automation_event(
         if not found:
             return False
         else:
-            logger.info("Found event: `%s`" % event[-1].strip())
+            logger.info("Found event: `%s`", event[-1].strip())
             return True
     wait_for(search_logs, num_sec=180, message="log search")
 

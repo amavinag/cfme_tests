@@ -63,6 +63,8 @@ def get_ssh_client(hostname):
     return SSHClient(**connect_kwargs)
 
 
+# TODO: These calls here should not be separate functions, the functions should be on the appliance
+# and we should be using the with context manager, they are being used incorrectly below
 def stop_db_process(address):
     with get_ssh_client(address) as ssh:
         assert ssh.run_command('service {}-postgresql stop'.format(db.scl_name()))[0] == 0,\
@@ -145,10 +147,10 @@ def test_vm(request, provider, vm_name):
     request.addfinalizer(vm.delete_from_provider)
 
     if not provider.mgmt.does_vm_exist(vm_name):
-        logger.info("deploying {} on provider {}".format(vm_name, provider.key))
+        logger.info("deploying %s on provider %s", vm_name, provider.key)
         vm.create_on_provider(allow_skip="default")
     else:
-        logger.info("recycling deployed vm {} on provider {}".format(vm_name, provider.key))
+        logger.info("recycling deployed vm %s on provider %s", vm_name, provider.key)
     vm.provider.refresh_provider_relationships()
     vm.wait_to_appear()
     return vm

@@ -157,7 +157,9 @@ def pick(v_dict):
 
 class Version(object):
     """Version class based on distutil.version.LooseVersion"""
-    component_re = re.compile(r'(\d+ | [a-z]+ | \.)', re.VERBOSE)
+    SUFFIXES = ('nightly', 'pre-nightly', 'pre', 'alpha', 'beta')
+    SUFFIXES_STR = "|".join(SUFFIXES)
+    component_re = re.compile(r'(?:\s*(\d+|[a-z]+|\.|-(?:{})$))'.format(SUFFIXES_STR))
 
     def __init__(self, vstring):
         self.parse(vstring)
@@ -173,7 +175,13 @@ class Version(object):
             vstring = 'master'
 
         components = filter(lambda x: x and x != '.',
-                            self.component_re.split(vstring))
+                            self.component_re.findall(vstring))
+        # Check if we have a version suffix which denotes pre-release
+        if components and components[-1].startswith('-'):
+            self.suffix = components[-1][1:]    # Chop off the -
+            components = components[:-1]
+        else:
+            self.suffix = None
         for i in range(len(components)):
             try:
                 components[i] = int(components[i])
@@ -195,11 +203,12 @@ class Version(object):
         return self.vstring
 
     def __repr__(self):
-        return "Version ('%s')" % str(self)
+        return "Version ('{}')".format(str(self))
 
     def __cmp__(self, other):
         try:
-            other = Version(other)
+            if not isinstance(other, type(self)):
+                other = Version(other)
         except:
             raise ValueError('Cannot compare Version to {}'.format(type(other).__name__))
 
@@ -210,11 +219,30 @@ class Version(object):
         elif self == self.lowest() or other == self.latest():
             return -1
         else:
-            return cmp(self.version, other.version)
+            result = cmp(self.version, other.version)
+            if result != 0:
+                return result
+            # Use suffixes to decide
+            if self.suffix is None and other.suffix is None:
+                # No suffix, the same
+                return 0
+            elif self.suffix is None:
+                # This does not have suffix but the other does so this is "newer"
+                return 1
+            elif other.suffix is None:
+                # This one does have suffix and the other does not so this one is older
+                return -1
+            else:
+                # Both have suffixes, so do some math
+                self_suffix = self.SUFFIXES.index(self.suffix)
+                other_suffix = self.SUFFIXES.index(other.suffix)
+                return cmp(self_suffix, other_suffix)
 
     def __eq__(self, other):
         try:
-            return self.version == Version(other).version
+            if not isinstance(other, type(self)):
+                other = Version(other)
+            return self.version == other.version and self.suffix == other.suffix
         except:
             return False
 
@@ -222,7 +250,7 @@ class Version(object):
         """Enables to use ``in`` expression for :py:meth:`Version.is_in_series`.
 
         Example:
-            ``"5.2.5.2" in Version("5.2") returns ``True``
+            ``"5.5.5.2" in Version("5.5") returns ``True``
 
         Args:
             ver: Version that should be checked if it is in series of this version. If
@@ -236,7 +264,7 @@ class Version(object):
     def is_in_series(self, series):
         """This method checks whether the version belongs to another version's series.
 
-        Eg.: ``Version("5.2.5.2").is_in_series("5.2")`` returns ``True``
+        Eg.: ``Version("5.5.5.2").is_in_series("5.5")`` returns ``True``
 
         Args:
             series: Another :py:class:`Version` to check against. If string provided, will be
@@ -277,6 +305,7 @@ version_stream_product_mapping = {
     '5.3': SPTuple('downstream-53z', '3.1'),
     '5.4': SPTuple('downstream-54z', '3.2'),
     '5.5': SPTuple('downstream-55z', '4.0'),
+    '5.6': SPTuple('downstream-56z', '4.1'),
     LATEST: SPTuple('upstream', 'master')
 }
 

@@ -7,7 +7,7 @@ from cfme.web_ui import (
     accordion, fill, flash, paginator, toolbar, CheckboxTree, Region, Tree, Quadicon)
 from cfme.web_ui.menu import extend_nav
 from functools import partial
-from utils import deferred_verpick, version
+from utils.api import rest_api
 from utils.wait import wait_for
 
 
@@ -26,12 +26,7 @@ policy_page = Region(
         'policy_tree': Tree('//div[@class="containerTableStyle"]/table')
     })
 
-manage_policies_tree = CheckboxTree(
-    {
-        version.LOWEST: "//div[@id='treebox']/div/table",
-        "5.3": "//div[@id='protect_treebox']/ul"
-    }
-)
+manage_policies_tree = CheckboxTree("//div[@id='protect_treebox']/ul")
 
 
 @extend_nav
@@ -116,6 +111,7 @@ class Instance(VM):
     TO_OPEN_EDIT = "Edit this Instance"
     TO_RETIRE = "Retire this Instance"
     QUADICON_TYPE = "instance"
+    VM_TYPE = "Instance"
 
     def create(self):
         """Provisions an instance with the given properties through CFME
@@ -125,8 +121,8 @@ class Instance(VM):
     def on_details(self, force=False):
         """A function to determine if the browser is already on the proper instance details page.
         """
-        locator = ("//div[@class='dhtmlxInfoBarLabel' and contains(. , 'Instance \"%s\"')]" %
-            self.name)
+        locator = ("//div[@class='dhtmlxInfoBarLabel' and contains(. , 'Instance \"{}\"')]".format(
+            self.name))
 
         # If the locator isn't on the page, or if it _is_ on the page and contains
         # 'Timelines' we are on the wrong page and take the appropriate action
@@ -156,6 +152,14 @@ class Instance(VM):
             else:
                 return True
 
+    def get_vm_via_rest(self):
+        # Try except block, because instances collection isn't available on 5.4
+        try:
+            instance = rest_api().collections.instances.get(name=self.name)
+        except AttributeError:
+            raise Exception("Collection instances isn't available")
+        return instance
+
 
 @VM.register_for_provider_type("openstack")
 class OpenStackInstance(Instance):
@@ -176,14 +180,8 @@ class OpenStackInstance(Instance):
     STATE_ON = "on"
     STATE_OFF = "off"
     STATE_ERROR = "non-operational"
-    STATE_PAUSED = deferred_verpick({
-        version.LOWEST: "off",
-        "5.4": "paused",
-    })
-    STATE_SUSPENDED = deferred_verpick({
-        version.LOWEST: "off",
-        "5.4": "suspended",
-    })
+    STATE_PAUSED = "paused"
+    STATE_SUSPENDED = "suspended"
     STATE_UNKNOWN = "unknown"
 
     def create(self, email=None, first_name=None, last_name=None, cloud_network=None,
@@ -232,13 +230,11 @@ class OpenStackInstance(Instance):
             flash.assert_success_message(
                 "VM Provision Request was Submitted, you will be notified when your VMs are ready")
 
-        row_description = 'Provision from [%s] to [%s]' % (self.template_name, self.name)
+        row_description = 'Provision from [{}] to [{}]'.format(self.template_name, self.name)
         cells = {'Description': row_description}
         row, __ = wait_for(requests.wait_for_request, [cells],
                            fail_func=requests.reload, num_sec=600, delay=20)
-        assert row.last_message.text == version.pick(
-            {version.LOWEST: 'VM Provisioned Successfully',
-             "5.3": 'Vm Provisioned Successfully', })
+        assert row.last_message.text == 'Vm Provisioned Successfully'
 
     def power_control_from_provider(self, option):
         """Power control the instance from the provider
@@ -285,6 +281,7 @@ class EC2Instance(Instance):
     STATE_ON = "on"
     STATE_OFF = "off"
     STATE_SUSPENDED = "suspended"
+    STATE_TERMINATED = "terminated"
     STATE_UNKNOWN = "unknown"
 
     def create(self, email=None, first_name=None, last_name=None, availability_zone=None,
@@ -335,13 +332,11 @@ class EC2Instance(Instance):
             flash.assert_success_message(
                 "VM Provision Request was Submitted, you will be notified when your VMs are ready")
 
-        row_description = 'Provision from [%s] to [%s]' % (self.template_name, self.name)
+        row_description = 'Provision from [{}] to [{}]'.format(self.template_name, self.name)
         cells = {'Description': row_description}
         row, __ = wait_for(requests.wait_for_request, [cells],
                            fail_func=requests.reload, num_sec=900, delay=20)
-        assert row.last_message.text == version.pick(
-            {version.LOWEST: 'VM Provisioned Successfully',
-             "5.3": 'Vm Provisioned Successfully', })
+        assert row.last_message.text == 'Vm Provisioned Successfully'
 
     def power_control_from_provider(self, option):
         """Power control the instance from the provider
@@ -518,8 +513,8 @@ class Image(Template):
     def on_details(self, force=False):
         """A function to determine if the browser is already on the proper image details page.
         """
-        locator = ("//div[@class='dhtmlxInfoBarLabel' and contains(. , 'Image \"%s\"')]" %
-            self.name)
+        locator = ("//div[@class='dhtmlxInfoBarLabel' and contains(. , 'Image \"{}\"')]".format(
+            self.name))
 
         # If the locator isn't on the page, or if it _is_ on the page and contains
         # 'Timelines' we are on the wrong page and take the appropriate action

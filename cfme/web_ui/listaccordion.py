@@ -80,18 +80,40 @@ def is_active(name):
     return sel.is_displayed(_content_element(name))
 
 
-def select(name, link_title):
-    """ Clicks an active link in accordion section
+def _get_link(name, link_title_or_text, by_title=True):
+    """Retrieves the ListAccordionLink object for given accordion name and title
 
     Args:
         name: Name of the accordion.
-        link_title: Title of link in expanded accordion section.
+        link_title_or_text: Title or text of link in expanded accordion section.
+        by_title: Whether to search by title or by text.
     """
     if not is_active(name):
         click(name)
     link_root = _content_element(name)
-    link = ListAccordionLink(link_title, link_root)
-    link.click()
+    return ListAccordionLink(link_title_or_text, link_root, by_title)
+
+
+def select(name, link_title_or_text, by_title=True):
+    """ Clicks an active link in accordion section
+
+    Args:
+        name: Name of the accordion.
+        link_title_or_text: Title or text of link in expanded accordion section.
+        by_title: Whether to search by title or by text.
+    """
+    return _get_link(name, link_title_or_text, by_title).click()
+
+
+def is_selected(name, link_title_or_text, by_title=True):
+    """ Checks if the link in accordion section is selected
+
+    Args:
+        name: Name of the accordion.
+        link_title_or_text: Title or text of link in expanded accordion section.
+        by_title: Whether to search by title or by text.
+    """
+    return _get_link(name, link_title_or_text, by_title).is_selected()
 
 
 def get_active_links(name):
@@ -115,17 +137,24 @@ class ListAccordionLink(Pretty):
     """
     pretty_attrs = ['title', 'root']
 
-    def __init__(self, title, root=None):
+    def __init__(self, title, root=None, by_title=True):
         self.root = root
         self.title = title
+        self.by_title = by_title
 
     def locate(self):
         """ Locates an active link.
 
         Returns: An XPATH locator for the element."""
-        locator = './/div[@class="panecontent"]//a[@title="{title}" and not(child::img)]|'\
-                  './li[not(contains(@class, "disabled"))]/a[@title="{title}"]'\
-                  .format(title=self.title)
+        if self.by_title:
+            locator = './/div[@class="panecontent"]//a[@title={title} and not(child::img)]|'\
+                      './li[not(contains(@class, "disabled"))]/a[@title={title}]'\
+                      .format(title=quoteattr(self.title))
+        else:
+            locator = (
+                './/div[@class="panecontent"]//a[normalize-space(.)={title} and not(child::img)]|'
+                './li[not(contains(@class, "disabled"))]/a[normalize-space(.)={title}]'
+                .format(title=quoteattr(self.title)))
         return locator
 
     def _check_exists(self):
@@ -146,3 +175,10 @@ class ListAccordionLink(Pretty):
         """
         self._check_exists()
         sel.click(sel.element(self.locate(), root=self.root))
+
+    def is_selected(self):
+        """Looks whether this option is selected"""
+        self._check_exists()
+        e = sel.element(self.locate(), root=self.root)
+        parent_li = sel.element('..', root=e)
+        return 'active' in (sel.get_attribute(parent_li, 'class') or '')  # Ensure it is a str

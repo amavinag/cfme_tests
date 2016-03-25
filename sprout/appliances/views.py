@@ -54,8 +54,7 @@ def providers(request, provider_id=None):
         except ObjectDoesNotExist:
             messages.warning(request, "Provider '{}' does not exist.".format(provider_id))
             return redirect("providers")
-    providers = Provider.objects.order_by("id")
-    complete_usage = Provider.complete_user_usage()
+    providers = Provider.objects.filter(hidden=False).order_by("id")
     return render(request, 'appliances/providers.html', locals())
 
 
@@ -533,9 +532,12 @@ def vms(request, current_provider=None):
 def vms_table(request, current_provider=None):
     if not request.user.is_authenticated():
         return go_home(request)
-    manager = get_mgmt(current_provider)
-    vms = sorted(manager.list_vm())
-    return render(request, 'appliances/vms/_list.html', locals())
+    try:
+        manager = get_mgmt(current_provider)
+        vms = sorted(manager.list_vm())
+        return render(request, 'appliances/vms/_list.html', locals())
+    except Exception as e:
+        return HttpResponse('{}: {}'.format(type(e).__name__, str(e)), content_type="text/plain")
 
 
 def power_state(request, current_provider):
@@ -626,3 +628,71 @@ def provider_enable_disable(request, provider_id, disabled=None):
     messages.success(
         request, 'Provider {}, {}.'.format(provider_id, "disabled" if disabled else "enabled"))
     return go_back_or_home(request)
+
+
+def check_appliance(request, provider_id, appliance_name):
+    try:
+        appliance = Appliance.objects.get(name=appliance_name, template__provider=provider_id)
+    except ObjectDoesNotExist:
+        return json_response(None)
+    owner = appliance.owner
+    if owner is not None:
+        owner = owner.username
+    data = {
+        'stream': appliance.template.template_group.id,
+        'version': appliance.template.version,
+        'date': appliance.template.date.strftime('%Y-%m-%d'),
+        'preconfigured': appliance.template.preconfigured,
+        'owner': owner,
+    }
+    return json_response(data)
+
+
+def check_template(request, provider_id, template_name):
+    try:
+        template = Template.objects.get(name=template_name, provider=provider_id)
+    except ObjectDoesNotExist:
+        return json_response(None)
+    data = {
+        'stream': template.template_group.id,
+        'version': template.version,
+        'date': template.date.strftime('%Y-%m-%d'),
+        'preconfigured': template.preconfigured,
+    }
+    return json_response(data)
+
+
+def check_pool(request, pool_id):
+    try:
+        pool = AppliancePool.objects.get(id=pool_id)
+    except ObjectDoesNotExist:
+        return json_response(None)
+    data = {
+        'description': pool.description,
+        'stream': pool.group.id,
+        'version': pool.version,
+        'date': pool.date.strftime('%Y-%m-%d'),
+        'preconfigured': pool.preconfigured,
+        'finished': pool.finished,
+        'owner': pool.owner.username,
+        'appliances': [[a.name, a.template.provider.id] for a in pool.appliances]
+    }
+    return json_response(data)
+
+
+def check_pools(request):
+    data = []
+    for pool in AppliancePool.objects.all():
+        pool_data = {
+            'description': pool.description,
+            'id': pool.id,
+            'stream': pool.group.id,
+            'version': pool.version,
+            'date': pool.date.strftime('%Y-%m-%d'),
+            'preconfigured': pool.preconfigured,
+            'finished': pool.finished,
+            'owner': pool.owner.username,
+            'appliances': [[a.name, a.template.provider.id] for a in pool.appliances]
+        }
+        data.append(pool_data)
+    return json_response(data)

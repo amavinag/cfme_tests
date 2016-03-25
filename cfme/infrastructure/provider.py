@@ -60,12 +60,7 @@ properties_form = Form(
     ])
 
 
-manage_policies_tree = CheckboxTree(
-    {
-        version.LOWEST: "//div[@id='treebox']/div/table",
-        "5.3": "//div[@id='protect_treebox']/ul"
-    }
-)
+manage_policies_tree = CheckboxTree("//div[@id='protect_treebox']/ul")
 
 cfg_btn = partial(tb.select, 'Configuration')
 pol_btn = partial(tb.select, 'Policy')
@@ -109,6 +104,8 @@ class Provider(Pretty, CloudInfraProvider):
     STATS_TO_MATCH = ['num_template', 'num_vm', 'num_datastore', 'num_host', 'num_cluster']
     string_name = "Infrastructure"
     page_name = "infrastructure"
+    instances_page_name = "infra_vm_and_templates"
+    templates_page_name = "infra_vm_and_templates"
     quad_name = "infra_prov"
     properties_form = properties_form
     add_provider_button = form_buttons.FormButton("Add this Infrastructure Provider")
@@ -285,19 +282,13 @@ class SCVMMProvider(Provider):
 
     def _form_mapping(self, create=None, **kwargs):
 
-        values = version.pick({
-            version.LOWEST: {
-                'name_text': kwargs.get('name'),
-                'type_select': create and 'Microsoft System Center VMM',
-                'hostname_text': kwargs.get('hostname'),
-                'ipaddress_text': kwargs.get('ip_address')},
-            "5.3.1": {
-                'name_text': kwargs.get('name'),
-                'type_select': create and 'Microsoft System Center VMM',
-                'hostname_text': kwargs.get('hostname'),
-                'ipaddress_text': kwargs.get('ip_address'),
-                'sec_protocol': kwargs.get('sec_protocol')}
-        })
+        values = {
+            'name_text': kwargs.get('name'),
+            'type_select': create and 'Microsoft System Center VMM',
+            'hostname_text': kwargs.get('hostname'),
+            'ipaddress_text': kwargs.get('ip_address'),
+            'sec_protocol': kwargs.get('sec_protocol')
+        }
 
         if 'sec_protocol' in values and values['sec_protocol'] is 'Kerberos':
             values['sec_realm'] = kwargs.get('sec_realm')
@@ -331,10 +322,7 @@ def get_all_providers(do_not_navigate=False):
     if not do_not_navigate:
         sel.force_navigate('infrastructure_providers')
     providers = set([])
-    link_marker = version.pick({
-        version.LOWEST: "ext_management_system",
-        "5.2.5": "ems_infra"
-    })
+    link_marker = "ems_infra"
     for page in paginator.pages():
         for title in sel.elements("//div[@id='quadicon']/../../../tr/td/a[contains(@href,"
                 "'{}/show')]".format(link_marker)):

@@ -201,6 +201,9 @@ class CatalogItem(Updateable, Pretty):
         self.provisioning_data = prov_data
         self.domain = domain
 
+    def __str__(self):
+        return self.name
+
     def create(self):
         sel.force_navigate('catalog_item_new',
                            context={'provider_type': self.item_type})
@@ -208,8 +211,8 @@ class CatalogItem(Updateable, Pretty):
         fill(basic_info_form, {'name_text': self.name,
                                'description_text': self.description,
                                'display_checkbox': self.display_in,
-                               'select_catalog': self.catalog,
-                               'select_dialog': self.dialog,
+                               'select_catalog': str(self.catalog),
+                               'select_dialog': str(self.dialog),
                                'select_orch_template': self.orch_template,
                                'select_provider': self.provider_type})
         if self.item_type != "Orchestration":
@@ -235,8 +238,7 @@ class CatalogItem(Updateable, Pretty):
                                'description_text':
                                updates.get('description', None)},
              action=basic_info_form.edit_button)
-        flash.assert_success_message('Service Catalog Item "%s" was saved' %
-                                     self.name)
+        flash.assert_success_message('Service Catalog Item "{}" was saved'.format(self.name))
 
     def delete(self):
         sel.force_navigate('catalog_item', context={'catalog': self.catalog,
@@ -302,14 +304,17 @@ class CatalogBundle(Updateable, Pretty):
         self.catalog = catalog
         self.dialog = dialog
 
+    def __str__(self):
+        return self.name
+
     def create(self, cat_items):
         sel.force_navigate('catalog_bundle_new')
         domain = "ManageIQ (Locked)"
         fill(basic_info_form, {'name_text': self.name,
                                'description_text': self.description,
                                'display_checkbox': self.display_in,
-                               'select_catalog': self.catalog,
-                               'select_dialog': self.dialog})
+                               'select_catalog': str(self.catalog),
+                               'select_dialog': str(self.dialog)})
         if current_version().is_in_series("5.3"):
             sel.click(basic_info_form.field_entry_point)
             dynamic_tree.click_path("Datastore", domain, "Service", "Provisioning",
@@ -319,8 +324,7 @@ class CatalogBundle(Updateable, Pretty):
         for cat_item in cat_items:
             fill(resources_form, {'choose_resource': cat_item})
         sel.click(resources_form.add_button)
-        flash.assert_success_message('Catalog Bundle "%s" was added' %
-                                     self.name)
+        flash.assert_success_message('Catalog Bundle "{}" was added'.format(self.name))
 
     def update(self, updates):
         sel.force_navigate('catalog_bundle_edit',
@@ -333,5 +337,4 @@ class CatalogBundle(Updateable, Pretty):
         fill(resources_form, {'choose_resource':
                               updates.get('cat_item', None)},
              action=resources_form.save_button)
-        flash.assert_success_message('Catalog Bundle "%s" was saved' %
-                                     self.name)
+        flash.assert_success_message('Catalog Bundle "{}" was saved'.format(self.name))

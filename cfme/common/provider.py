@@ -20,19 +20,13 @@ from utils.signals import fire
 from utils.wait import wait_for, RefreshTimer
 from utils.stats import tol_check
 from utils.update import Updateable
-from utils import version
 from utils.varmeth import variable
 
 from . import PolicyProfileAssignable, Taggable
 
 cfg_btn = partial(tb.select, 'Configuration')
 
-manage_policies_tree = CheckboxTree(
-    {
-        version.LOWEST: "//div[@id='treebox']/div/table",
-        "5.3": "//div[@id='protect_treebox']/ul"
-    }
-)
+manage_policies_tree = CheckboxTree("//div[@id='protect_treebox']/ul")
 
 details_page = Region(infoblock_type='detail')
 
@@ -135,7 +129,8 @@ class BaseProvider(Taggable, Updateable):
         elif self.key is not None:
             return conf.cfme_data['management_systems'][self.key]
         else:
-            raise ProviderHasNoKey('Provider %s has no key, so cannot get yaml data', self.name)
+            raise ProviderHasNoKey(
+                'Provider {} has no key, so cannot get yaml data'.format(self.name))
 
     def get_mgmt_system(self):
         """ Returns the mgmt_system using the :py:func:`utils.providers.get_mgmt` method.
@@ -148,7 +143,8 @@ class BaseProvider(Taggable, Updateable):
         elif getattr(self, 'provider_data', None):
             return get_mgmt(self.provider_data)
         else:
-            raise ProviderHasNoKey('Provider %s has no key, so cannot get mgmt system')
+            raise ProviderHasNoKey(
+                'Provider {} has no key, so cannot get mgmt system'.format(self.name))
 
     def _submit(self, cancel, submit_button):
         if cancel:
@@ -239,11 +235,16 @@ class BaseProvider(Taggable, Updateable):
 
     def validate(self):
         refresh_timer = RefreshTimer(time_for_refresh=300)
-        wait_for(self.is_refreshed,
-                 [refresh_timer],
-                 message="is_refreshed",
-                 num_sec=1000,
-                 delay=60)
+        try:
+            wait_for(self.is_refreshed,
+                     [refresh_timer],
+                     message="is_refreshed",
+                     num_sec=1000,
+                     delay=60)
+        except Exception:
+            # To see the possible error.
+            self.load_details(refresh=True)
+            raise
 
     def validate_stats(self, ui=False):
         """ Validates that the detail page matches the Providers information.
@@ -282,8 +283,11 @@ class BaseProvider(Taggable, Updateable):
     @variable(alias='rest')
     def refresh_provider_relationships(self, from_list_view=False):
         # from_list_view is ignored as it is included here for sake of compatibility with UI call.
-        col = rest_api().collections.providers.find_by(name=self.name)[0]
-        col.action.refresh()
+        col = rest_api().collections.providers.find_by(name=self.name)
+        try:
+            col[0].action.refresh()
+        except IndexError:
+            raise Exception("Provider collection empty")
 
     @refresh_provider_relationships.variant('ui')
     def refresh_provider_relationships_ui(self, from_list_view=False):
@@ -339,15 +343,15 @@ class BaseProvider(Taggable, Updateable):
                                            cfme_stat,
                                            min_error=0.05,
                                            low_val_correction=2)
-                logger.info(' Matching stat [{}], Host({}), CFME({}), '
-                    'with tolerance {} is {}'.format(stat, host_stats[stat], cfme_stat,
-                                                     value, success))
+                logger.info(' Matching stat [%s], Host(%s), CFME(%s), '
+                    'with tolerance %s is %s', stat, host_stats[stat], cfme_stat, value, success)
                 if not success:
                     return False
             except KeyError:
-                raise HostStatsNotContains("Host stats information does not contain '%s'" % stat)
+                raise HostStatsNotContains(
+                    "Host stats information does not contain '{}'".format(stat))
             except AttributeError:
-                raise ProviderHasNoProperty("Provider does not know how to get '%s'" % stat)
+                raise ProviderHasNoProperty("Provider does not know how to get '{}'".format(stat))
         else:
             return True
 
@@ -371,7 +375,7 @@ class BaseProvider(Taggable, Updateable):
         """ Returns ``True`` if on the providers detail page, ``False`` if not."""
         ensure_browser_open()
         return sel.is_displayed(
-            '//div[@class="dhtmlxInfoBarLabel-2"][contains(., "%s (Summary)")]' % self.name)
+            '//div[@class="dhtmlxInfoBarLabel-2"][contains(., "{} (Summary)")]'.format(self.name))
 
     def load_details(self, refresh=False):
         """To be compatible with the Taggable and PolicyProfileAssignable mixins."""
@@ -565,8 +569,8 @@ def _fill_credential(form, cred, validate=None):
 
 def cleanup_vm(vm_name, provider):
     try:
-        logger.info('Cleaning up VM %s on provider %s' % (vm_name, provider.key))
+        logger.info('Cleaning up VM %s on provider %s', vm_name, provider.key)
         provider.mgmt.delete_vm(vm_name)
     except:
         # The mgmt_sys classes raise Exception :\
-        logger.warning('Failed to clean up VM %s on provider %s' % (vm_name, provider.key))
+        logger.warning('Failed to clean up VM %s on provider %s', vm_name, provider.key)

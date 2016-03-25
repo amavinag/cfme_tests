@@ -13,14 +13,16 @@ structure like so:
         prov_1:
             name: test
             ip: 10.0.0.1
+            test_vm: abc1
         prov_2:
             name: test2
             ip: 10.0.0.2
+            test_vm: abc2
 
-Our test requires that we have a Provider Object and a management system object. Let's
-assume a test prototype like so::
+Our test requires that we have a Provider Object and as an example, the 'test_vm' field of the
+object. Let's assume a test prototype like so::
 
-    test_provider_add(provider_obj, provider_mgmt_sys):
+    test_provider_add(provider_obj, test_vm):
 
 In this case we require the test to be run twice, once for prov_1 and then again for prov_2.
 We are going to use the generate function to help us provide parameters to pass to
@@ -35,10 +37,10 @@ that a provider object is obtained via the ``Provider`` class, and the ``mgmt_sy
 is obtained via a ``MgmtSystem`` class.
 
 ===== =============== =================
-~     provider_obj    provider_mgmt_sys
+~     provider_obj    test_vm
 ===== =============== =================
-prov1 Provider(prov1) MgmtSystem(prov1)
-prov2 Provider(prov2) MgmtSystem(prov2)
+prov1 Provider(prov1) abc1
+prov2 Provider(prov2) abc2
 ===== =============== =================
 
 This is analogous to the following layout:
@@ -56,7 +58,7 @@ This could be generated like so:
 
     def gen_providers:
 
-        argnames = ['provider_obj', 'provider_mgmt_sys']
+        argnames = ['provider_obj', 'test_vm']
         argvalues = []
         idlist = []
 
@@ -64,7 +66,7 @@ This could be generated like so:
             idlist.append(provider)
             argvalues.append([
                 Provider(yaml['providers'][provider]['name']),
-                MgmtSystem(yaml['providers'][provider]['ip']))
+                yaml['providers'][provider]['test_vm'])
             ])
 
         return argnames, argvalues, idlist
@@ -192,7 +194,7 @@ def provider_by_type(metafunc, provider_types, *fields, **options):
 
     The ``**options`` available are defined below:
 
-    * ``required_fields``: when fields passed are not present, skip them
+    * ``require_fields``: when fields passed are not present, skip them, boolean
     * ``choose_random``: choose a single provider from the list
     * ``template_location``: Specification where a required tempalte lies in the yaml, If not
       found in the provider, warning is printed and the test not collected. The spec
@@ -258,7 +260,7 @@ def provider_by_type(metafunc, provider_types, *fields, **options):
             continue
 
         if not prov_obj:
-            logger.debug("Whilst trying to create an object for {} we failed".format(provider))
+            logger.debug("Whilst trying to create an object for %s we failed", provider)
             continue
 
         skip = False
@@ -301,19 +303,14 @@ def provider_by_type(metafunc, provider_types, *fields, **options):
             allowed_flags = set(defined_flags) - set(excluded_flags)
 
             if set(test_flags) - allowed_flags:
-                logger.info("Skipping Provider {} for test {} in module {} because "
+                logger.info("Skipping Provider %s for test %s in module %s because "
                     "it does not have the right flags, "
-                    "{} does not contain {}".format(provider,
-                                                    metafunc.function.func_name,
-                                                    metafunc.function.__module__,
-                                                    list(allowed_flags),
-                                                    list(set(test_flags) - allowed_flags)))
+                    "%s does not contain %s",
+                    provider, metafunc.function.func_name, metafunc.function.__module__,
+                    list(allowed_flags), list(set(test_flags) - allowed_flags))
                 continue
 
         try:
-            if prov_obj.type == "scvmm" and version.current_version() < "5.3":
-                # Ignore SCVMM on 5.2
-                continue
             if "since_version" in data:
                 # Ignore providers that are not supported in this version yet
                 if version.current_version() < data["since_version"]:
@@ -349,8 +346,8 @@ def provider_by_type(metafunc, provider_types, *fields, **options):
                 for field in template_location:
                     o = o[field]
             except (IndexError, KeyError):
-                logger.info("Cannot apply {} to {} in the template specification, ignoring.".format(
-                    repr(field), repr(o)))
+                logger.info("Cannot apply %s to %s in the template specification, ignoring.",
+                    repr(field), repr(o))
             else:
                 if not isinstance(o, basestring):
                     raise ValueError("{} is not a string! (for template)".format(repr(o)))
@@ -358,7 +355,7 @@ def provider_by_type(metafunc, provider_types, *fields, **options):
                 if templates is not None:
                     if o not in templates:
                         logger.info(
-                            "Wanted template {} on {} but it is not there!\n".format(o, provider))
+                            "Wanted template %s on %s but it is not there!\n", o, provider)
                         # Skip collection of this one
                         continue
 
@@ -505,7 +502,8 @@ def param_check(metafunc, argnames, argvalues):
         funcname = metafunc.function.__name__
 
         test_name = '.'.join(filter(None, (modname, classname, funcname)))
-        skip_msg = 'Parametrization for %s yielded no values, marked for uncollection' % test_name
+        skip_msg = 'Parametrization for {} yielded no values,'\
+            ' marked for uncollection'.format(test_name)
         logger.warning(skip_msg)
 
         # apply the mark

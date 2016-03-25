@@ -13,7 +13,6 @@ from cfme.infrastructure import virtual_machines
 from cfme.web_ui import flash, Table, InfoBlock, toolbar as tb
 from cfme.web_ui.menu import nav
 from cfme.configure import tasks
-from utils.blockers import BZ
 from utils.log import logger
 from utils.providers import setup_a_provider
 from utils.update import update
@@ -125,11 +124,6 @@ def test_user_password_required_error_validation():
         user.create()
 
 
-@pytest.mark.meta(
-    blockers=[
-        BZ(1118040, unblock=lambda appliance_version: appliance_version < "5.3")
-    ]
-)
 def test_user_group_error_validation():
     user = ac.User(
         name='user' + fauxfactory.gen_alphanumeric(),
@@ -206,7 +200,7 @@ def test_current_user_login_delete(request):
     request.addfinalizer(user.delete)
     request.addfinalizer(login.login_admin)
     with user:
-        with error.expected("Current EVM User \"%s\" cannot be deleted" % user.name):
+        with error.expected("Current EVM User \"{}\" cannot be deleted".format(user.name)):
             user.delete()
 
 
@@ -487,17 +481,17 @@ def test_permissions(role, allowed_actions, disallowed_actions):
                 try:
                     action_thunk()
                 except Exception:
-                    fails[name] = "%s: %s" % (name, traceback.format_exc())
+                    fails[name] = "{}: {}".format(name, traceback.format_exc())
             for name, action_thunk in disallowed_actions.items():
                 try:
                     with error.expected(Exception):
                         action_thunk()
                 except error.UnexpectedSuccessException:
-                    fails[name] = "%s: %s" % (name, traceback.format_exc())
+                    fails[name] = "{}: {}".format(name, traceback.format_exc())
             if fails:
                 message = ''
                 for failure in fails.values():
-                    message = "%s\n\n%s" % (message, failure)
+                    message = "{}\n\n{}".format(message, failure)
                 raise Exception(message)
     finally:
         login.login_admin()

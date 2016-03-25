@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from contextlib import contextmanager
 from functools import partial
-
+from cached_property import cached_property
 import cfme.fixtures.pytest_selenium as sel
 from fixtures.pytest_store import store
 
@@ -18,16 +18,24 @@ from utils.log import logger
 from utils.timeutil import parsetime
 from utils.update import Updateable
 from utils.wait import wait_for, TimedOutError
-from utils import version, conf, lazycache
+from utils import version, conf
 from utils.pretty import Pretty
 from utils.signals import fire, on_signal
-from utils.version import current_version
 
 
 @on_signal("server_details_changed")
 def invalidate_server_details():
-    del store.current_appliance.configuration_details
-    del store.current_appliance.zone_description
+    # TODO: simplify after idempotent cached property is availiable
+    # https://github.com/pydanny/cached-property/issues/31
+    try:
+        del store.current_appliance.configuration_details
+    except AttributeError:
+        pass
+    try:
+        del store.current_appliance.zone_description
+    except AttributeError:
+        pass
+
 
 access_tree = partial(accordion.tree, "Access Control")
 database_tree = partial(accordion.tree, "Database")
@@ -115,9 +123,7 @@ tag_form = Form(
         ('name', Input("entry[name]")),
         ('display_name', Input("entry[description]")),
         ('add', Input("accept")),
-        ('new', {
-            version.LOWEST: "//img[@alt='New']",
-            '5.3': "//span[@class='glyphicon glyphicon-plus']"})
+        ('new', "//span[@class='glyphicon glyphicon-plus']")
     ])
 
 zone_form = Form(
@@ -136,12 +142,8 @@ zone_form = Form(
 
 
 records_table = Table("//div[@id='records_div']/table")
-category_table = Table({
-    version.LOWEST: "//div[@id='settings_co_categories']/fieldset/table",
-    "5.3": "//div[@id='settings_co_categories']/table"})
-classification_table = Table({
-    version.LOWEST: "//div[@id='classification_entries_div']/fieldset/table",
-    "5.3": "//div[@id='classification_entries_div']/table"})
+category_table = Table("//div[@id='settings_co_categories']/table")
+classification_table = Table("//div[@id='classification_entries_div']/table")
 zones_table = Table("//div[@id='settings_list']/table")
 
 
@@ -596,15 +598,10 @@ class ServerLogDepot(Pretty):
             self.password = password
             self.name = name
 
-        @lazycache
+        @cached_property
         def p_types(self):
             return version.pick({
                 version.LOWEST: dict(
-                    ftp="File Transfer Protocol",
-                    nfs="Network File System",
-                    smb="Samba"
-                ),
-                "5.3": dict(
                     anon_ftp="Anonymous FTP",
                     ftp="FTP",
                     nfs="NFS",
@@ -633,7 +630,7 @@ class ServerLogDepot(Pretty):
                 "name": self.name,
                 "uri": self.uri,
             }
-            if self.p_type != "nfs":
+            if self.p_type not in {"nfs", "anon_ftp"}:
                 change_stored_password()
                 details["user"] = self.username
                 details["password"] = self.password
@@ -788,11 +785,6 @@ class BasicInformation(Updateable, Pretty):
         """
         sel.force_navigate("cfg_settings_currentserver_server")
         fill(self.basic_information, self.details)
-        # Workaround for issue with form_button staying dimmed.
-        if self.details["appliance_zone"] is not None and current_version() < "5.3":
-            sel.browser().execute_script(
-                "$j.ajax({type: 'POST', url: '/ops/settings_form_field_changed/server',"
-                " data: {'server_zone':'%s'}})" % (self.details["appliance_zone"]))
         sel.click(form_buttons.save)
         # TODO: Maybe make a cascaded delete on lazycache?
         fire('server_details_changed')
@@ -824,8 +816,7 @@ class SMTPSettings(Updateable):
         )
         smtp.update()
 
-    Todo:
-        * send a test-email, if that will be needed.
+    Note: TODO: send a test-email, if that will be needed.
 
     """
     smtp_settings = Form(
@@ -903,7 +894,7 @@ class AuthSetting(Updateable, Pretty):
         """Sets the session timeout of the appliance."""
         sel.force_navigate("cfg_settings_currentserver_auth")
         logger.info(
-            "Setting authentication timeout to {} hours and {} minutes.".format(hours, minutes))
+            "Setting authentication timeout to %s hours and %s minutes.", hours, minutes)
         fill(cls.form, {"timeout_h": hours, "timeout_m": minutes}, action=form_buttons.save)
         flash.assert_no_errors()
         flash.assert_message_contain("Authentication settings saved")
@@ -1140,7 +1131,6 @@ class Schedule(Pretty):
     """ Configure/Configuration/Region/Schedules functionality
 
     CReate, Update, Delete functionality.
-    Todo: Maybe the row handling might go into Table class?
 
     Args:
         name: Schedule's name.
@@ -1175,6 +1165,9 @@ class Schedule(Pretty):
         # Or
         Schedule.enable_by_names("One schedule", "Other schedule")
         # And so.
+
+    Note: TODO: Maybe the row handling might go into Table class?
+
     """
     tab = {"Hourly": "timer_hours",
            "Daily": "timer_days",
@@ -1206,9 +1199,7 @@ class Schedule(Pretty):
         ("time_zone", {
             version.LOWEST: Select("select#time_zone"),
             '5.5': AngularSelect('time_zone')}),
-        ("start_date", {
-            "5.3": Calendar("miq_date_1"),
-            "5.4": Calendar("miq_angular_date_1")}),
+        ("start_date", Calendar("miq_angular_date_1")),
         ("start_hour", {
             version.LOWEST: Select("select#start_hour"),
             '5.5': AngularSelect('start_hour')}),
@@ -1352,7 +1343,7 @@ class Schedule(Pretty):
                     break
             else:
                 raise ScheduleNotFound(
-                    "Schedule '%s' could not be found for selection!" % name
+                    "Schedule '{}' could not be found for selection!".format(name)
                 )
 
         sel.force_navigate("cfg_settings_schedules")
@@ -1438,9 +1429,7 @@ class DatabaseBackupSchedule(Schedule):
         ("log_protocol", {
             version.LOWEST: Select("select#log_protocol"),
             '5.5': AngularSelect('log_protocol')}),
-        ("depot_name", {
-            "5.3": None,
-            "5.4": Input("depot_name")}),
+        ("depot_name", Input("depot_name")),
         ("uri", Input("uri")),
         ("log_userid", Input("log_userid")),
         ("log_password", Input("log_password")),
@@ -1456,9 +1445,7 @@ class DatabaseBackupSchedule(Schedule):
         ("time_zone", {
             version.LOWEST: Select("select#time_zone"),
             '5.5': AngularSelect('time_zone')}),
-        ("start_date", {
-            "5.3": Calendar("miq_date_1"),
-            "5.4": Calendar("miq_angular_date_1")}),
+        ("start_date", Calendar("miq_angular_date_1")),
         ("start_hour", {
             version.LOWEST: Select("select#start_hour"),
             '5.5': AngularSelect('start_hour')}),
@@ -1643,7 +1630,7 @@ class Zone(Pretty):
             form_buttons.cancel()
         else:
             form_buttons.add()
-            flash.assert_message_match('Zone "%s" was added' % self.name)
+            flash.assert_message_match('Zone "{}" was added'.format(self.name))
 
     def update(self, updates, cancel=False):
         """ Modify an existing zone with information from this instance.
@@ -1662,7 +1649,7 @@ class Zone(Pretty):
             form_buttons.cancel()
         else:
             form_buttons.save()
-            flash.assert_message_match('Zone "%s" was saved' % self.name)
+            flash.assert_message_match('Zone "{}" was saved'.format(self.name))
 
     def delete(self, cancel=False):
         """ Delete the Zone represented by this object.
@@ -1674,7 +1661,7 @@ class Zone(Pretty):
         tb.select("Configuration", "Delete this Zone", invokes_alert=True)
         sel.handle_alert(cancel)
         if not cancel:
-            flash.assert_message_match('Zone "%s": Delete successful' % self.name)
+            flash.assert_message_match('Zone "{}": Delete successful'.format(self.name))
 
     @classmethod
     def go_to_by_description(cls, description):
@@ -1695,15 +1682,15 @@ class Zone(Pretty):
         try:
             zones_table.click_row_by_cells({1: description}, partial_check=True)
         except:
-            raise ZoneNotFound("No unique Zones with the description '%s'" % description)
+            raise ZoneNotFound("No unique Zones with the description '{}'".format(description))
 
     @property
     def exists(self):
         sel.force_navigate("cfg_settings_zones")
         table = Table(zones_table)
-        if table.find_cell(1, "Zone: %s" % self.description):
+        if table.find_cell(1, "Zone: {}".format(self.description)):
             return True
-        elif table.find_cell(1, "Zone : %s" % self.description):  # Another possibility
+        elif table.find_cell(1, "Zone : {}".format(self.description)):  # Another possibility
             return True
         else:
             return False
@@ -1857,7 +1844,7 @@ def get_server_roles(navigate=True, db=True):
             try:
                 role_list[name] = sel.element(locator).is_selected()
             except:
-                logger.warning("role not found, skipping, netapp storage role?  (" + name + ")")
+                logger.warning("role not found, skipping, netapp storage role?  (%s)", name)
         return role_list
 
 
@@ -1907,7 +1894,7 @@ def set_ntp_servers(*servers):
     fill(ntp_servers, fields, action=form_buttons.save)
     if servers:
         flash.assert_message_match(
-            "Configuration settings saved for CFME Server \"%s [%s]\" in Zone \"%s\"" % (
+            "Configuration settings saved for CFME Server \"{} [{}]\" in Zone \"{}\"".format(
                 server_name(),
                 server_id(),
                 server_zone_description().partition(' ')[0].lower()))

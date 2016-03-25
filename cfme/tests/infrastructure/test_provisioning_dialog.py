@@ -7,14 +7,12 @@ from datetime import datetime, timedelta
 
 from cfme.common.provider import cleanup_vm
 from cfme.common.vm import VM
-from cfme.exceptions import FlashMessageException
 from cfme.provisioning import provisioning_form
 from cfme.services import requests
 from cfme.web_ui import InfoBlock, fill, flash
-from utils import mgmt_system, testgen, version
+from utils import mgmt_system, testgen
 from utils.blockers import BZ
 from utils.log import logger
-from utils.providers import setup_provider
 from utils.wait import wait_for, TimedOutError
 
 
@@ -56,10 +54,7 @@ def pytest_generate_tests(metafunc):
 
 @pytest.fixture(scope="function")
 def prov_data(provisioning, provider):
-    if provider.type == "scvmm":
-        pytest.skip("SCVMM does not support provisioning yet!")  # TODO: After fixing - remove
-
-    return {
+    data = {
         "first_name": fauxfactory.gen_alphanumeric(),
         "last_name": fauxfactory.gen_alphanumeric(),
         "email": "{}@{}.test".format(
@@ -71,8 +66,15 @@ def prov_data(provisioning, provider):
         "datastore_name": {"name": provisioning["datastore"]},
         "host_name": {"name": provisioning["host"]},
         # "catalog_name": provisioning["catalog_item_type"],
-        "provision_type": "Native Clone" if provider.type == "rhevm" else "VMware"
     }
+
+    if provider.type == 'rhevm':
+        data['provision_type'] = 'Native Clone'
+    elif provider.type == 'virtualcenter':
+        data['provision_type'] = 'VMware'
+    # Otherwise just leave it alone
+
+    return data
 
 
 @pytest.fixture(scope="function")
@@ -81,12 +83,7 @@ def template_name(provisioning):
 
 
 @pytest.fixture(scope="function")
-def provisioner(request, provider):
-    if not provider.exists:
-        try:
-            setup_provider(provider.key)
-        except FlashMessageException as e:
-            e.skip_and_log("Provider failed to set up")
+def provisioner(request, setup_provider, provider):
 
     def _provisioner(template, provisioning_data, delayed=None):
         pytest.sel.force_navigate('infrastructure_provision_vms', context={
@@ -101,7 +98,7 @@ def provisioner(request, provider):
         request.addfinalizer(lambda: cleanup_vm(vm_name, provider))
         if delayed is not None:
             total_seconds = (delayed - datetime.utcnow()).total_seconds()
-            row_description = 'Provision from [%s] to [%s]' % (template, vm_name)
+            row_description = 'Provision from [{}] to [{}]'.format(template, vm_name)
             cells = {'Description': row_description}
             try:
                 row, __ = wait_for(requests.wait_for_request, [cells],
@@ -113,14 +110,12 @@ def provisioner(request, provider):
         wait_for(provider.mgmt.does_vm_exist, [vm_name], handle_exception=True, num_sec=600)
 
         # nav to requests page happens on successful provision
-        logger.info('Waiting for cfme provision request for vm %s' % vm_name)
-        row_description = 'Provision from [%s] to [%s]' % (template, vm_name)
+        logger.info('Waiting for cfme provision request for vm %s', vm_name)
+        row_description = 'Provision from [{}] to [{}]'.format(template, vm_name)
         cells = {'Description': row_description}
         row, __ = wait_for(requests.wait_for_request, [cells],
                            fail_func=requests.reload, num_sec=900, delay=20)
-        assert row.last_message.text == version.pick(
-            {version.LOWEST: 'VM Provisioned Successfully',
-             "5.3": 'Vm Provisioned Successfully', })
+        assert row.last_message.text == 'Vm Provisioned Successfully'
         return VM.factory(vm_name, provider)
 
     return _provisioner
@@ -234,7 +229,6 @@ def test_power_on_or_off_after_provision(provisioner, prov_data, template_name, 
     )
 
 
-@pytest.mark.uncollectif(lambda: version.current_version() < '5.3')
 def test_tag(provisioner, prov_data, template_name, provider):
     """ Tests tagging VMs using provisioning dialogs.
 
@@ -252,8 +246,7 @@ def test_tag(provisioner, prov_data, template_name, provider):
         test_flag: provision
     """
     prov_data["vm_name"] = "test_prov_dlg_{}".format(fauxfactory.gen_alphanumeric())
-    prov_data["apply_tags"] = [
-        ([version.pick({version.LOWEST: "Service Level", "5.3": "Service Level *"}), "Gold"], True)]
+    prov_data["apply_tags"] = [(["Service Level *", "Gold"], True)]
 
     vm = provisioner(template_name, prov_data)
 

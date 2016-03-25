@@ -15,6 +15,7 @@ from cfme.web_ui import (
 from cfme.web_ui.menu import extend_nav
 from functools import partial
 from selenium.common.exceptions import NoSuchElementException
+from utils.api import rest_api
 from utils.conf import cfme_data
 from utils.log import logger
 from utils.wait import wait_for
@@ -32,12 +33,7 @@ pwr_btn = partial(toolbar.select, 'Power')
 
 create_button = form_buttons.FormButton("Create")
 
-manage_policies_tree = CheckboxTree(
-    {
-        version.LOWEST: "//div[@id='treebox']/div/table",
-        "5.3": "//div[@id='protect_treebox']/ul"
-    }
-)
+manage_policies_tree = CheckboxTree("//div[@id='protect_treebox']/ul")
 
 
 manage_policies_page = Region(
@@ -46,12 +42,7 @@ manage_policies_page = Region(
     })
 
 
-snapshot_tree = Tree(
-    {
-        version.LOWEST: "//div[@id='treebox']/div/table",
-        "5.3": "//div[@id='snapshots_treebox']/ul"
-    }
-)
+snapshot_tree = Tree("//div[@id='snapshots_treebox']/ul")
 
 snapshot_form = Form(
     fields=[
@@ -176,8 +167,8 @@ class Vm(BaseVM, Common):
             self.vm = parent_vm
 
         def _nav_to_snapshot_mgmt(self):
-            locator = ("//div[@class='dhtmlxInfoBarLabel' and " +
-                       "contains(. , '\"Snapshots\" for Virtual Machine \"%s\"') ]" % self.name)
+            locator = ("//div[@class='dhtmlxInfoBarLabel' and contains(. , " +
+                       "'\"Snapshots\" for Virtual Machine \"{}\"') ]".format(self.name))
             if not sel.is_displayed(locator):
                 self.vm.load_details()
                 sel.click(InfoBlock.element("Properties", "Snapshots"))
@@ -268,6 +259,7 @@ class Vm(BaseVM, Common):
     ALL_LIST_LOCATION = "infra_vms"
     TO_OPEN_EDIT = "Edit this VM"
     TO_RETIRE = "Retire this VM"
+    VM_TYPE = "Virtual Machine"
 
     def power_control_from_provider(self, option):
         """Power control a vm from the provider
@@ -355,7 +347,7 @@ class Vm(BaseVM, Common):
         }
         from cfme.provisioning import provisioning_form
         fill(provisioning_form, provisioning_data, action=provisioning_form.submit_button)
-        cells = {'Description': 'Publish from [%s] to [%s]' % (self.name, template_name)}
+        cells = {'Description': 'Publish from [{}] to [{}]'.format(self.name, template_name)}
         row, __ = wait_for(
             requests.wait_for_request, [cells], fail_func=requests.reload, num_sec=900, delay=20)
         return Template(template_name, self.provider)
@@ -390,6 +382,9 @@ class Vm(BaseVM, Common):
             "/td[not(contains(@class, 'key'))]"])
         return sel.text(l).strip()
 
+    def get_vm_via_rest(self):
+        return rest_api().collections.vms.get(name=self.name)
+
     class CfmeRelationship(object):
 
         relationship_form = Form(
@@ -418,7 +413,7 @@ class Vm(BaseVM, Common):
 
         def set_relationship(self, server_name, server_id, click_cancel=False):
             self.navigate()
-            option = "%s (%d)" % (server_name, server_id)
+            option = "{} ({})".format(server_name, server_id)
 
             if click_cancel:
                 fill(self.relationship_form, {'server_select': option},
@@ -450,10 +445,7 @@ class Genealogy(object):
     Args:
         o: The :py:class:`Vm` or :py:class:`Template` object.
     """
-    genealogy_tree = CheckboxTree({
-        version.LOWEST: "//div[@id='treebox']/div/table",
-        "5.3": "//div[@id='genealogy_treebox']/ul",
-    })
+    genealogy_tree = CheckboxTree("//div[@id='genealogy_treebox']/ul")
 
     section_comparison_tree = CheckboxTree("//div[@id='all_sections_treebox']/div/table")
     apply_button = form_buttons.FormButton("Apply sections")
@@ -706,5 +698,5 @@ def get_number_of_vms(do_not_navigate=False):
         logger.debug("No page controls")
         return 0
     total = paginator.rec_total()
-    logger.debug("Number of VMs: {}".format(total))
+    logger.debug("Number of VMs: %s", total)
     return int(total)

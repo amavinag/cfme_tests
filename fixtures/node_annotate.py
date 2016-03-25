@@ -34,9 +34,10 @@ def pytest_configure(config):
         to_parse = project_path.join(path)
         parsed = parse(to_parse)
         if not parsed:
-            store.terminalreporter.line('no test annotation found in %s' % to_parse, yellow=True)
+            store.terminalreporter.line(
+                'no test annotation found in {}'.format(to_parse), yellow=True)
     else:
-        store.terminalreporter.line('no test annotation found in %s' % path, yellow=True)
+        store.terminalreporter.line('no test annotation found in {}'.format(path), yellow=True)
         parsed = []
     config.pluginmanager.register(MarkFromMap.from_parsed_list(
         parsed, 'tier', pytest.mark.tier))
@@ -105,7 +106,7 @@ def generate_nodeid(mapping):
     else:
         file_part = caseid
 
-    return "%s.py::%s%s" % (file_part, attribute_part, parameter_part)
+    return "{}.py::{}{}".format(file_part, attribute_part, parameter_part)
 
 
 def _clean(mapping):
@@ -130,4 +131,4 @@ def parse(path):
 
 if __name__ == '__main__':
     mapping_file = project_path.join(py.std.sys.argv[1])
-    print yaml.dump(parse(mapping_file), default_flow_style=False)
+    print(yaml.dump(parse(mapping_file), default_flow_style=False))

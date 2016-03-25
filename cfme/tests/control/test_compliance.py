@@ -3,11 +3,12 @@ import diaper
 import fauxfactory
 import pytest
 
+from mgmtsystem import exceptions
+
 from cfme.common.vm import VM
 from cfme.configure.configuration import VMAnalysisProfile
 from cfme.control.explorer import (
     VMCompliancePolicy, VMCondition, PolicyProfile)
-from utils.mgmt_system import exceptions
 from cfme.web_ui import flash, toolbar
 from fixtures.pytest_store import store
 from utils import testgen, version
@@ -46,8 +47,8 @@ def compliance_vm(request, provider):
         appl_name = provider.mgmt.get_vm_name_from_ip(ip_addr)
         appliance = Appliance(provider.key, appl_name)
         logger.info(
-            "The tested appliance ({}) is already on this provider ({}) so reusing it.".format(
-                appl_name, provider.key))
+            "The tested appliance (%s) is already on this provider (%s) so reusing it.",
+            appl_name, provider.key)
         try:
             appliance.configure_fleecing()
         except (EOFError, ApplianceException) as e:
@@ -58,7 +59,7 @@ def compliance_vm(request, provider):
                     type(e).__name__, str(e)))
         vm = VM.factory(appl_name, provider)
     except exceptions.VMNotFoundViaIP:
-        logger.info("Provisioning a new appliance on provider {}.".format(provider.key))
+        logger.info("Provisioning a new appliance on provider %s.", provider.key)
         appliance = provision_appliance(
             vm_name_prefix=PREFIX + "host_",
             version=str(version.current_version()),
@@ -98,14 +99,14 @@ def analysis_profile(compliance_vm):
 def fleecing_vm(
         request, compliance_vm, vm_analysis, provider,
         analysis_profile):
-    logger.info("Provisioning an appliance for fleecing on {}".format(provider.key))
+    logger.info("Provisioning an appliance for fleecing on %s", provider.key)
     # TODO: When we get something smaller, use it!
     appliance = provision_appliance(
         vm_name_prefix=PREFIX + "for_fleece_",
         version=str(version.current_version()),
         provider_name=provider.key)
     request.addfinalizer(lambda: diaper(appliance.destroy))
-    logger.info("Appliance {} provisioned".format(appliance.vm_name))
+    logger.info("Appliance %s provisioned", appliance.vm_name)
     vm = VM.factory(appliance.vm_name, provider)
     provider.refresh_provider_relationships()
     vm.wait_to_appear()

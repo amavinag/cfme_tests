@@ -10,6 +10,14 @@ from collections import Mapping
 from functools import partial
 from operator import methodcaller
 
+from mgmtsystem.virtualcenter import VMWareSystem
+from mgmtsystem.scvmm import SCVMMSystem
+from mgmtsystem.ec2 import EC2System
+from mgmtsystem.openstack import OpenstackSystem
+from mgmtsystem.kubernetes import Kubernetes
+from mgmtsystem.openshift import Openshift
+from mgmtsystem.openstack_infra import OpenstackInfraSystem
+
 import cfme.fixtures.pytest_selenium as sel
 from fixtures.pytest_store import store
 from cfme.web_ui import Quadicon, paginator, toolbar
@@ -19,31 +27,32 @@ from cfme.containers.provider import KubernetesProvider, OpenshiftProvider
 from cfme.infrastructure.provider import (
     OpenstackInfraProvider, RHEVMProvider, VMwareProvider, SCVMMProvider)
 from fixtures.prov_filter import filtered
-from utils import conf, mgmt_system, version
+from utils import conf, version
+from utils.mgmt_system import RHEVMSystem
 from utils.log import logger, perflog
 from utils.wait import wait_for
 
-#: mapping of infra provider type names to :py:mod:`utils.mgmt_system` classes
+#: mapping of infra provider type names to ``mgmtsystem`` classes
 infra_provider_type_map = {
-    'virtualcenter': mgmt_system.VMWareSystem,
-    'rhevm': mgmt_system.RHEVMSystem,
-    'scvmm': mgmt_system.SCVMMSystem,
-    'openstack-infra': mgmt_system.OpenstackInfraSystem,
+    'virtualcenter': VMWareSystem,
+    'rhevm': RHEVMSystem,
+    'scvmm': SCVMMSystem,
+    'openstack-infra': OpenstackInfraSystem,
 }
 
-#: mapping of cloud provider type names to :py:mod:`utils.mgmt_system` classes
+#: mapping of cloud provider type names to ``mgmtsystem`` classes
 cloud_provider_type_map = {
-    'ec2': mgmt_system.EC2System,
-    'openstack': mgmt_system.OpenstackSystem,
+    'ec2': EC2System,
+    'openstack': OpenstackSystem,
 }
 
-#: mapping of container provider type names to :py:mod:`utils.mgmt_system` classes
+#: mapping of container provider type names to ``mgmtsystem`` classes
 container_provider_type_map = {
-    'kubernetes': mgmt_system.Kubernetes,
-    'openshift': mgmt_system.Openshift
+    'kubernetes': Kubernetes,
+    'openshift': Openshift
 }
 
-#: mapping of all provider type names to :py:mod:`utils.mgmt_system` classes
+#: mapping of all provider type names to ``mgmtsystem`` classes
 provider_type_map = dict(
     infra_provider_type_map.items()
     + cloud_provider_type_map.items()
@@ -67,7 +76,7 @@ def list_providers(allowed_types):
         provider_type = data.get("type", None)
         if provider not in filtered:
             continue
-        assert provider_type is not None, "Provider %s has no type specified!" % provider
+        assert provider_type is not None, "Provider {} has no type specified!".format(provider)
         if provider_type in allowed_types:
             providers.append(provider)
     return providers
@@ -99,7 +108,7 @@ def is_container_provider(provider_key):
 
 def get_mgmt(provider_key, providers=None, credentials=None):
     """
-    Provides a :py:mod:`utils.mgmt_system` object, based on the request.
+    Provides a ``mgmtsystem`` object, based on the request.
 
     Args:
         provider_key: The name of a provider, as supplied in the yaml configuration files.
@@ -109,7 +118,7 @@ def get_mgmt(provider_key, providers=None, credentials=None):
             locations. Expects a dict.
         credentials: A set of credentials in the same format as the ``credentials`` yamls files.
             If ``None`` then credentials are loaded from the default locations. Expects a dict.
-    Return: A provider instance of the appropriate :py:class:`utils.mgmt_system.MgmtSystemAPIBase`
+    Return: A provider instance of the appropriate ``mgmtsystem.MgmtSystemAPIBase``
         subclass
     """
     if providers is None:
@@ -142,14 +151,14 @@ def get_provider_key(provider_name):
 
 
 def get_mgmt_by_name(provider_name, *args, **kwargs):
-    """Provides a :py:mod:`utils.mgmt_system` object, based on the request.
+    """Provides a ``mgmtsystem`` object, based on the request.
 
     For detailed parameter description, refer to the :py:func:`get_mgmt` (except its
     `provider_key` parameter)
 
     Args:
         provider_name: 'Nice' provider name (name field from provider's YAML entry)
-    Return: A provider instance of the appropriate :py:class:`utils.mgmt_system.MgmtSystemAPIBase`
+    Return: A provider instance of the appropriate ``mgmtsystem``
         subclass
     """
     return get_mgmt(get_provider_key(provider_name), *args, **kwargs)
@@ -295,7 +304,7 @@ def setup_provider(provider_key, validate=True, check_existing=True):
         # pass so we don't skip the validate step
         pass
     else:
-        logger.info('Setting up provider: %s' % provider.key)
+        logger.info('Setting up provider: %s', provider.key)
         provider.create(validate_credentials=True)
 
     if validate:
@@ -383,7 +392,7 @@ def _setup_providers(prov_class, validate, check_existing):
             quad = Quadicon(provider_name, options_map[prov_class]['quad'])
             for page in paginator.pages():
                 if sel.is_displayed(quad):
-                    logger.debug('Provider "%s" exists, skipping' % provider_key)
+                    logger.debug('Provider %s exists, skipping', provider_key)
                     break
             else:
                 add_providers.append(provider_key)
@@ -392,7 +401,7 @@ def _setup_providers(prov_class, validate, check_existing):
         add_providers = options_map[prov_class]['list']()
 
     if add_providers:
-        logger.info('Providers to be added: %s' % ', '.join(add_providers))
+        logger.info('Providers to be added: %s', ', '.join(add_providers))
 
     # Save the provider objects for validation and return
     added_providers = []
@@ -695,4 +704,4 @@ class UnknownProvider(Exception):
         self.provider_key = provider_key
 
     def __str__(self):
-        return ('Unknown provider: "%s"' % self.provider_key)
+        return ('Unknown provider: "{}"'.format(self.provider_key))

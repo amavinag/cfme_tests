@@ -2,67 +2,12 @@
 import atexit
 import re
 import subprocess
-
+import os
 # import diaper for backward compatibility
 import diaper
 
+on_rtd = os.environ.get('READTHEDOCS', None) == 'True'
 
-def lazycache(wrapped_method):
-    """method decorator to create a lazily-evaluated and cached property
-
-    ``lazycache``'d properties are complete object descriptors, supporting
-    ``get``, ``set``, and ``del``, though ``del`` will clear a property's cache rather
-    than destroy the property entirely
-
-    Usage:
-
-        >>> from utils import lazycache
-        >>> class Example(object):
-        ...     @lazycache
-        ...     def lazyprop(self):
-        ...             return '42'
-        ...
-        >>> ex = Example()
-        >>> value = ex.lazyprop
-        >>> print value
-        42
-        >>> print value is ex.lazyprop
-        # lazyprop guarantees this to be True, normal properties do not.
-        True
-        >>> ex.lazyprop = '99'
-        >>> print ex.lazyprop
-        # setting works!
-        99
-        >>> del(ex.lazyprop)
-        >>> print ex.lazyprop
-        # deleting clears the cache, so the value is recomputed on the next call
-        42
-
-    Values are stored in a private attribute of the same name as the method being decorated,
-    e.g. a decorated method named ``lazyprop`` will store its cached value in an attr
-    called ``_lazyprop``
-    """
-    attr = '_' + wrapped_method.__name__
-
-    if wrapped_method.__doc__:
-        doc = wrapped_method.__doc__ + '\n\nThis attribute is lazily evaluated and cached.'
-    else:
-        doc = None
-
-    def get_lazy(self):
-        if not hasattr(self, attr):
-            setattr(self, attr, wrapped_method(self))
-        return getattr(self, attr)
-
-    def set_lazy(self, value):
-        setattr(self, attr, value)
-
-    def del_lazy(self):
-        if hasattr(self, attr):
-            delattr(self, attr)
-
-    lazy = property(get_lazy, set_lazy, del_lazy, doc)
-    return lazy
 
 
 def property_or_none(wrapped, *args, **kwargs):
@@ -101,7 +46,7 @@ def classproperty(f):
         ...     def bar(cls):
         ...         return "bar"
         ...
-        >>> print Foo.bar
+        >>> print(Foo.bar)
         baz
     """
     return _classproperty(classmethod(f))
@@ -181,11 +126,17 @@ def deferred_verpick(version_d):
 
     Useful for verpicked constants.
     """
-    from utils.version import pick as _version_pick
+    from utils.version import Version, pick as _version_pick
 
     @classproperty
     def getter(self):
-        return _version_pick(version_d)
+        if on_rtd:
+            if version_d:
+                return version_d[sorted(version_d.keys(), key=Version)[-1]]
+            else:
+                raise Exception("Nothing to pick from")
+        else:
+            return _version_pick(version_d)
     return getter
 
 
@@ -291,3 +242,37 @@ def iterate_pairs(iterable):
     it = iter(iterable)
     for i in it:
         yield i, next(it)
+
+
+def icastmap(t, i, *args, **kwargs):
+    """Works like the map() but is made specially to map classes on iterables. A generator version.
+
+    This function only applies the ``t`` to the item of ``i`` if it is not of that type.
+
+    Args:
+        t: The class that you want all the yielded items to be type of.
+        i: Iterable with items to be cast.
+
+    Returns:
+        A generator.
+    """
+    for item in i:
+        if isinstance(item, t):
+            yield item
+        else:
+            yield t(item, *args, **kwargs)
+
+
+def castmap(t, i, *args, **kwargs):
+    """Works like the map() but is made specially to map classes on iterables.
+
+    This function only applies the ``t`` to the item of ``i`` if it is not of that type.
+
+    Args:
+        t: The class that you want all theitems in the list to be type of.
+        i: Iterable with items to be cast.
+
+    Returns:
+        A list.
+    """
+    return list(icastmap(t, i, *args, **kwargs))

@@ -5,20 +5,22 @@ import fauxfactory
 import pytest
 import cfme.fixtures.pytest_selenium as sel
 
-from cfme.common.vm import VM
+from cfme.common.vm import VM, Template
 from cfme.common.provider import cleanup_vm
 from cfme.configure import configuration, tasks
-from cfme.infrastructure import host
+from cfme.configure.configuration import VMAnalysisProfile
+from cfme.control.explorer import PolicyProfile, VMControlPolicy, Action
+from cfme.infrastructure import host, datastore
 from cfme.provisioning import do_vm_provisioning
-from cfme.web_ui import InfoBlock, Table, SplitTable, paginator, tabstrip as tabs, toolbar as tb
+from cfme.web_ui import InfoBlock, tabstrip as tabs, toolbar as tb
 from fixtures.pytest_store import store
 from utils import testgen, ssh, safe_string, version
 from utils.conf import cfme_data
 from utils.log import logger
 from utils.wait import wait_for
-from utils.blockers import GH
+from utils.blockers import GH, BZ
 
-pytestmark = [pytest.mark.meta(blockers=["GH#ManageIQ/manageiq:6859"],
+pytestmark = [pytest.mark.meta(blockers=["GH#ManageIQ/manageiq:6939"],
                                unblock=lambda provider: provider.type != 'rhevm')]
 
 WINDOWS = {'id': "Red Hat Enterprise Windows", 'icon': 'windows'}
@@ -54,6 +56,8 @@ DEB_BASED = {
         'install-command': 'env DEBIAN_FRONTEND=noninteractive apt-get -y install {}',
         'package-number': 'dpkg --get-selections | wc -l'},
 }
+
+ssa_expect_file = "/etc/hosts"
 
 
 def pytest_generate_tests(metafunc):
@@ -92,7 +96,7 @@ def pytest_generate_tests(metafunc):
                     continue
 
             # Set VM name here
-            vm_name = 'test_ssa_{}-{}'.format(fauxfactory.gen_alphanumeric(), vm_analysis_key)
+            vm_name = 'ssa_{}-{}'.format(fauxfactory.gen_alphanumeric(), vm_analysis_key)
             vm_analysis_data['vm_name'] = vm_name
 
             new_idlist.append('{}-{}'.format(idlist[i], vm_analysis_key))
@@ -128,14 +132,6 @@ def local_setup_provider(request, setup_provider_modscope, provider, vm_analysis
     configuration.set_server_roles(**roles)
 
 
-@pytest.fixture(scope="module")
-def setup_ci_template(cloud_init_template=None):
-    if cloud_init_template is None:
-        return
-    if not cloud_init_template.exists():
-        cloud_init_template.create()
-
-
 def set_host_credentials(request, vm_analysis_new, provider):
     # Add credentials to host
     test_host = host.Host(name=vm_analysis_new['host'])
@@ -161,7 +157,7 @@ def set_host_credentials(request, vm_analysis_new, provider):
 
 
 @pytest.fixture(scope="module")
-def instance(request, local_setup_provider, provider, setup_ci_template, vm_analysis_new):
+def instance(request, local_setup_provider, provider, vm_analysis_new):
     """ Fixture to provision instance on the provider
     """
     vm_name = vm_analysis_new.get('vm_name')
@@ -211,26 +207,33 @@ def instance(request, local_setup_provider, provider, setup_ci_template, vm_anal
         request.addfinalizer(lambda: cleanup_vm(vm_name, provider))
         do_vm_provisioning(template, provider, vm_name, provisioning_data, request, None,
                            num_sec=6000)
+    logger.info("VM %s provisioned, waiting for IP address to be assigned", vm_name)
 
-        mgmt_system.start_vm(vm_name)
+    @pytest.wait_for(timeout="10m", delay=5)
+    def get_ip_address():
+        logger.info("Power state for %s vm: %s", vm_name, mgmt_system.vm_status(vm_name))
+        if mgmt_system.is_vm_stopped(vm_name):
+            mgmt_system.start_vm(vm_name)
 
-        logger.info("VM {} provisioned, waiting for IP address to be assigned".format(vm_name))
-        connect_ip, tc = wait_for(mgmt_system.get_ip_address, [vm_name], num_sec=6000,
-                                  handle_exception=True)
+        ip = mgmt_system.current_ip_address(vm_name)
+        logger.info("Fetched IP for %s: %s", vm_name, ip)
+        return ip is not None
+
+    connect_ip = mgmt_system.get_ip_address(vm_name)
     assert connect_ip is not None
 
     # Check that we can at least get the uptime via ssh this should only be possible
     # if the username and password have been set via the cloud-init script so
     # is a valid check
     if vm_analysis_new['fs-type'] not in ['ntfs', 'fat32']:
-        logger.info("Waiting for {} to be available via SSH".format(connect_ip))
+        logger.info("Waiting for %s to be available via SSH", connect_ip)
         ssh_client = ssh.SSHClient(hostname=connect_ip, username=vm_analysis_new['username'],
                                    password=vm_analysis_new['password'], port=22)
-        wait_for(ssh_client.uptime, num_sec=3600, handle_exception=True)
+        wait_for(ssh_client.uptime, num_sec=3600, handle_exception=False)
         vm.ssh = ssh_client
 
     vm.system_type = detect_system_type(vm)
-    logger.info("Detected system type: {}".format(vm.system_type))
+    logger.info("Detected system type: %s", vm.system_type)
     vm.image = vm_analysis_new['image']
     vm.connect_ip = connect_ip
 
@@ -240,6 +243,52 @@ def instance(request, local_setup_provider, provider, setup_ci_template, vm_anal
         cfme_rel = Vm.CfmeRelationship(vm)
         cfme_rel.set_relationship(str(configuration.server_name()), configuration.server_id())
     return vm
+
+
+@pytest.fixture(scope="module")
+def policy_profile(request, instance):
+    collected_files = [
+        {"Name": "/etc/redhat-access-insights/machine-id", "Collect Contents?": True},
+        {"Name": ssa_expect_file, "Collect Contents?": True},
+    ]
+
+    analysis_profile_name = 'ssa_analysis_{}'.format(fauxfactory.gen_alphanumeric())
+    analysis_profile = VMAnalysisProfile(analysis_profile_name, analysis_profile_name,
+                                         categories=["check_system"],
+                                         files=collected_files)
+    if analysis_profile.exists:
+        analysis_profile.delete()
+    analysis_profile.create()
+    request.addfinalizer(analysis_profile.delete)
+
+    action = Action(
+        'ssa_action_{}'.format(fauxfactory.gen_alpha()),
+        "Assign Profile to Analysis Task",
+        dict(analysis_profile=analysis_profile_name))
+    if action.exists:
+        action.delete()
+    action.create()
+    request.addfinalizer(action.delete)
+
+    policy = VMControlPolicy('ssa_policy_{}'.format(fauxfactory.gen_alpha()))
+    if policy.exists:
+        policy.delete()
+    policy.create()
+    request.addfinalizer(policy.delete)
+
+    policy.assign_events("VM Analysis Start")
+    request.addfinalizer(policy.assign_events)
+    policy.assign_actions_to_event("VM Analysis Start", action)
+
+    profile = PolicyProfile('ssa_policy_profile_{}'.format(fauxfactory.gen_alpha()),
+                            policies=[policy])
+    if profile.exists:
+        profile.delete()
+    profile.create()
+    request.addfinalizer(profile.delete)
+
+    instance.assign_policy_profiles(profile.description)
+    request.addfinalizer(lambda: instance.unassign_policy_profiles(profile.description))
 
 
 def is_vm_analysis_finished(vm_name):
@@ -281,6 +330,79 @@ def detect_system_type(vm):
 
 
 @pytest.mark.long_running
+@pytest.mark.meta(blockers=[
+    BZ(1311134, unblock=lambda provider: provider.type != 'rhevm'),
+    BZ(1311218, unblock=lambda provider:
+        provider.type != 'virtualcenter' or provider.version < "6"),
+    BZ(1320248, unblock=lambda provider: version.current_version() >= "5.5")])
+def test_ssa_template(request, local_setup_provider, provider, vm_analysis_new, soft_assert):
+    """ Tests SSA can be performed on a template
+
+    Metadata:
+        test_flag: vm_analysis
+    """
+    template_name = vm_analysis_new['image']
+    template = Template.factory(template_name, provider, template=True)
+
+    # Set credentials to all hosts set for this datastore
+    if provider.type != 'openstack':
+        datastore_name = vm_analysis_new['datastore']
+        test_datastore = datastore.Datastore(datastore_name, provider.key)
+        host_list = cfme_data.get('management_systems', {})[provider.key].get('hosts', [])
+        host_names = test_datastore.get_hosts()
+        for host_name in host_names:
+            test_host = host.Host(name=host_name)
+            hosts_data = [x for x in host_list if x.name == host_name]
+            if len(hosts_data) > 0:
+                host_data = hosts_data[0]
+
+                if not test_host.has_valid_credentials:
+                    creds = host.get_credentials_from_config(host_data['credentials'])
+                    test_host.update(
+                        updates={'credentials': creds},
+                        validate_credentials=True
+                    )
+
+    template.smartstate_scan()
+    wait_for(lambda: is_vm_analysis_finished(template_name),
+             delay=15, timeout="10m", fail_func=lambda: tb.select('Reload'))
+
+    # Check release and quadricon
+    quadicon_os_icon = template.find_quadicon().os
+    details_os_icon = template.get_detail(
+        properties=('Properties', 'Operating System'), icon_href=True)
+    logger.info("Icons: {}, {}".format(details_os_icon, quadicon_os_icon))
+
+    # We shouldn't use get_detail anymore - it takes too much time
+    c_users = InfoBlock.text('Security', 'Users')
+    c_groups = InfoBlock.text('Security', 'Groups')
+    c_packages = 0
+    if vm_analysis_new['fs-type'] not in ['ntfs', 'fat32']:
+        c_packages = InfoBlock.text('Configuration', 'Packages')
+
+    logger.info("SSA shows {} users, {} groups and {} packages".format(
+        c_users, c_groups, c_packages))
+
+    if vm_analysis_new['fs-type'] not in ['ntfs', 'fat32']:
+        soft_assert(c_users != '0', "users: '{}' != '0'".format(c_users))
+        soft_assert(c_groups != '0', "groups: '{}' != '0'".format(c_groups))
+        soft_assert(c_packages != '0', "packages: '{}' != '0'".format(c_packages))
+    else:
+        # Make sure windows-specific data is not empty
+        c_patches = InfoBlock.text('Security', 'Patches')
+        c_applications = InfoBlock.text('Configuration', 'Applications')
+        c_win32_services = InfoBlock.text('Configuration', 'Win32 Services')
+        c_kernel_drivers = InfoBlock.text('Configuration', 'Kernel Drivers')
+        c_fs_drivers = InfoBlock.text('Configuration', 'File System Drivers')
+
+        soft_assert(c_patches != '0', "patches: '{}' != '0'".format(c_patches))
+        soft_assert(c_applications != '0', "applications: '{}' != '0'".format(c_applications))
+        soft_assert(c_win32_services != '0', "win32 services: '{}' != '0'".format(c_win32_services))
+        soft_assert(c_kernel_drivers != '0', "kernel drivers: '{}' != '0'".format(c_kernel_drivers))
+        soft_assert(c_fs_drivers != '0', "fs drivers: '{}' != '0'".format(c_fs_drivers))
+
+
+@pytest.mark.long_running
 def test_ssa_vm(provider, instance, soft_assert):
     """ Tests SSA can be performed and returns sane results
 
@@ -299,8 +421,8 @@ def test_ssa_vm(provider, instance, soft_assert):
         e_packages = instance.ssh.run_command(
             instance.system_type['package-number']).output.strip('\n')
 
-    logger.info("Expecting to have {} users, {} groups and {} packages".format(
-        e_users, e_groups, e_packages))
+    logger.info(
+        "Expecting to have %s users, %s groups and %s packages", e_users, e_groups, e_packages)
 
     instance.smartstate_scan()
     wait_for(lambda: is_vm_analysis_finished(instance.name),
@@ -310,18 +432,19 @@ def test_ssa_vm(provider, instance, soft_assert):
     quadicon_os_icon = instance.find_quadicon().os
     details_os_icon = instance.get_detail(
         properties=('Properties', 'Operating System'), icon_href=True)
-    logger.info("Icons: {}, {}".format(details_os_icon, quadicon_os_icon))
+    logger.info("Icons: %s, %s", details_os_icon, quadicon_os_icon)
 
     # We shouldn't use get_detail anymore - it takes too much time
+    c_lastanalyzed = InfoBlock.text('Lifecycle', 'Last Analyzed')
     c_users = InfoBlock.text('Security', 'Users')
     c_groups = InfoBlock.text('Security', 'Groups')
     c_packages = 0
     if instance.system_type != WINDOWS:
         c_packages = InfoBlock.text('Configuration', 'Packages')
 
-    logger.info("SSA shows {} users, {} groups and {} packages".format(
-        c_users, c_groups, c_packages))
+    logger.info("SSA shows %s users, %s groups and %s packages", c_users, c_groups, c_packages)
 
+    soft_assert(c_lastanalyzed != 'Never', "Last Analyzed is set to Never")
     soft_assert(e_icon_part in details_os_icon,
                 "details icon: '{}' not in '{}'".format(e_icon_part, details_os_icon))
     soft_assert(e_icon_part in quadicon_os_icon,
@@ -382,20 +505,10 @@ def test_ssa_users(provider, instance, soft_assert):
         assert current == expected
 
     # Make sure created user is in the list
-    sel.click(InfoBlock("Security", "Users"))
-    template = '//div[@id="list_grid"]/div[@class="{}"]/table/tbody'
-    users = version.pick({
-        version.LOWEST: SplitTable(header_data=(template.format("xhdr"), 1),
-                                   body_data=(template.format("objbox"), 0)),
-        "5.5": Table('//table'),
-    })
-
-    for page in paginator.pages():
-        sel.wait_for_element(users)
-        if users.find_row('Name', username):
-            return
+    instance.open_details(("Security", "Users"))
     if instance.system_type != WINDOWS:
-        pytest.fail("User {0} was not found".format(username))
+        if not instance.paged_table.find_row_on_all_pages('Name', username):
+            pytest.fail("User {0} was not found".format(username))
 
 
 @pytest.mark.long_running
@@ -423,20 +536,10 @@ def test_ssa_groups(provider, instance, soft_assert):
         assert current == expected
 
     # Make sure created group is in the list
-    sel.click(InfoBlock("Security", "Groups"))
-    template = '//div[@id="list_grid"]/div[@class="{}"]/table/tbody'
-    groups = version.pick({
-        version.LOWEST: SplitTable(header_data=(template.format("xhdr"), 1),
-                                   body_data=(template.format("objbox"), 0)),
-        "5.5": Table('//table'),
-    })
-
-    for page in paginator.pages():
-        sel.wait_for_element(groups)
-        if groups.find_row('Name', group):
-            return
+    instance.open_details(("Security", "Groups"))
     if instance.system_type != WINDOWS:
-        pytest.fail("Group {0} was not found".format(group))
+        if not instance.paged_table.find_row_on_all_pages('Name', group):
+            pytest.fail("Group {0} was not found".format(group))
 
 
 @pytest.mark.long_running
@@ -460,7 +563,7 @@ def test_ssa_packages(provider, instance, soft_assert):
 
     cmd = package_command.format(package_name)
     output = instance.ssh.run_command(cmd.format(package_name)).output
-    logger.info("{0} output:\n{1}".format(cmd, output))
+    logger.info("%s output:\n%s", cmd, output)
 
     expected = instance.ssh.run_command(package_number_command).output.strip('\n')
 
@@ -473,15 +576,26 @@ def test_ssa_packages(provider, instance, soft_assert):
     assert current == expected
 
     # Make sure new package is listed
-    sel.click(InfoBlock("Configuration", "Packages"))
-    template = '//div[@id="list_grid"]/div[@class="{}"]/table/tbody'
-    packages = version.pick({
-        version.LOWEST: SplitTable(header_data=(template.format("xhdr"), 1),
-                                   body_data=(template.format("objbox"), 0)),
-        "5.5": Table('//table'),
-    })
+    instance.open_details(("Configuration", "Packages"))
+    if not instance.paged_table.find_row_on_all_pages('Name', package_name):
+        pytest.fail("Package {0} was not found".format(package_name))
 
-    for page in paginator.pages():
-        if packages.find_row('Name', package_name):
-            return
-    pytest.fail("Package {0} was not found".format(package_name))
+
+@pytest.mark.long_running
+def test_ssa_files(provider, instance, policy_profile, soft_assert):
+    """Tests that instances can be scanned for specific file."""
+
+    if instance.system_type == WINDOWS:
+        pytest.skip("We cannot verify Windows files yet")
+
+    instance.smartstate_scan()
+    wait_for(lambda: is_vm_analysis_finished(instance.name),
+             delay=15, timeout="10m", fail_func=lambda: tb.select('Reload'))
+
+    # Check that all data has been fetched
+    current = instance.get_detail(properties=('Configuration', 'Files'))
+    assert current != '0', "No files were scanned"
+
+    instance.open_details(("Configuration", "Files"))
+    if not instance.paged_table.find_row_on_all_pages('Name', ssa_expect_file):
+        pytest.fail("File {0} was not found".format(ssa_expect_file))

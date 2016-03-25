@@ -78,12 +78,11 @@ sections = {
         ('infrastructure_requests', 'Requests'),
         ('infrastructure_config_management', 'Configuration Management')
     ),
-    ('storage', 'Storage'): (
-        ('filers', 'Filers'),
-        ('volumes', 'Volumes'),
-        ('luns', 'LUNs'),
-        ('file_shares', 'File Shares'),
-        ('storage_managers', 'Storage Managers')
+    ('middleware', 'Middleware'): (
+        ('middleware_providers', 'Providers'),
+        ('middleware_servers', "Middleware Servers"),
+        ('middleware_deployments', "Middleware Deployments"),
+        ('middleware_topology', "Topology"),
     ),
     ('control', 'Control'): (
         ('control_explorer', 'Explorer'),
@@ -223,7 +222,7 @@ def reverse_lookup(toplevel_path, secondlevel_path=None):
 
     """
     if secondlevel_path:
-        menu_path = '%s/%s' % (toplevel_path, secondlevel_path)
+        menu_path = '{}/{}'.format(toplevel_path, secondlevel_path)
     else:
         menu_path = toplevel_path
 
@@ -244,7 +243,7 @@ def reverse_lookup(toplevel_path, secondlevel_path=None):
                 second_level = secondlevel()
             else:
                 second_level = secondlevel
-            if menu_path == '%s/%s' % (toplevel, second_level):
+            if menu_path == '{}/{}'.format(toplevel, second_level):
                 return secondlevel_dest
 
 

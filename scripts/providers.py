@@ -4,8 +4,7 @@ Given the name of a provider from cfme_data and using credentials from
 the credentials stash, call the corresponding action on that provider, along
 with any additional action arguments.
 
-See cfme_pages/common/mgmt_system.py for documentation on the callable methods
-themselves.
+See mgmtsystem for documentation on the callable methods themselves.
 
 Example usage:
 
@@ -67,9 +66,9 @@ def main():
         exit = 1
         exc_type = type(e).__name__
         if e.message:
-            sys.stderr.write('%s: %s\n' % (exc_type, e.message))
+            sys.stderr.write('{}: {}\n'.format(exc_type, e.message))
         else:
-            sys.stderr.write('%s\n' % exc_type)
+            sys.stderr.write('{}\n'.format(exc_type))
     else:
         if output is not None:
             print(output)
