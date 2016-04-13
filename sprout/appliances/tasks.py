@@ -30,6 +30,7 @@ from utils.path import project_path
 from utils.providers import get_mgmt
 from utils.timeutil import parsetime
 from utils.trackerbot import api, depaginate, parse_template
+from utils.version import Version
 from utils.wait import wait_for
 
 
@@ -40,10 +41,10 @@ VERSION_REGEXPS = [
     r"cfme-(\d)(\d)(\d)[.](\d{2})-",         # cfme-524.02-    -> 5.2.4.2
     r"cfme-(\d)(\d)(\d)[.](\d{2})[.](\d)-",  # cfme-524.02.1-    -> 5.2.4.2.1
     # 4 digits
-    r"cfme-(\d)(\d)(\d)(\d)-",      # cfme-5242-    -> 5.2.4.2
+    r"cfme-(?:nightly-)?(\d)(\d)(\d)(\d)-",      # cfme-5242-    -> 5.2.4.2
     r"cfme-(\d)(\d)(\d)-(\d)-",     # cfme-520-1-   -> 5.2.0.1
     # 5 digits  (not very intelligent but no better solution so far)
-    r"cfme-(\d)(\d)(\d)(\d{2})-",   # cfme-53111-   -> 5.3.1.11, cfme-53101 -> 5.3.1.1
+    r"cfme-(?:nightly-)?(\d)(\d)(\d)(\d{2})-",   # cfme-53111-   -> 5.3.1.11, cfme-53101 -> 5.3.1.1
 ]
 VERSION_REGEXPS = map(re.compile, VERSION_REGEXPS)
 TRACKERBOT_PAGINATE = 20
@@ -398,13 +399,27 @@ def prepare_template_verify_version(self, template_id):
     appliance = CFMEAppliance(template.provider_name, template.name)
     appliance.ipapp.wait_for_ssh()
     try:
-        # Remove the suffix (1.2.3.4-alpha1 -> 1.2.3.4)
-        true_version = re.sub(r"-[^-]*$", "", str(appliance.version).strip())
+        true_version = appliance.version
     except Exception as e:
         template.set_status("Some SSH error happened during appliance version check.")
         self.retry(args=(template_id,), exc=e, countdown=20, max_retries=5)
-    supposed_version = template.version
-    if true_version not in {"master", None} and true_version != supposed_version:
+    supposed_version = Version(template.version)
+    if true_version is None or true_version.vstring == 'master':
+        return
+    if true_version != supposed_version:
+        # Check if the difference is not just in the suffixes, which can be the case ...
+        if supposed_version.version == true_version.version:
+            # The two have same version but different suffixes, apply the suffix to the template obj
+            with transaction.atomic():
+                template.version = str(true_version)
+                template.save()
+                if template.parent_template is not None:
+                    # In case we have a parent template, update the version there too.
+                    if template.version != template.parent_template.version:
+                        pt = template.parent_template
+                        pt.version = template.version
+                        pt.save()
+            return  # no need to continue with spamming process
         # SPAM SPAM SPAM!
         with transaction.atomic():
             mismatch_in_db = MismatchVersionMailer.objects.filter(

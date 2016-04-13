@@ -5,13 +5,11 @@ import pytest
 from random import choice
 
 from utils import testgen
-from utils.blockers import BZ
 from utils.miq_soap import MiqVM, set_client
 from utils.providers import setup_a_provider as _setup_a_provider
 
 pytest_generate_tests = testgen.generate(
     testgen.infra_providers,
-    "small_template",
     scope="class"
 )
 
@@ -466,14 +464,7 @@ class TestProvisioning(object):
     WAIT_TIME_SLOW = 600
     SLOW_PROVIDERS = {"rhevm", "scvmm"}
 
-    @pytest.mark.meta(
-        server_roles="+automate",
-        blockers=[
-            BZ(1118831, unblock=lambda appliance_version: appliance_version < "5.3"),
-            1131480,
-            1132578
-        ]
-    )
+    @pytest.mark.meta(server_roles="+automate")
     @pytest.mark.usefixtures("setup_provider_clsscope")
     def test_provision_via_soap(self, request, soap_client, provider, small_template):
         """Tests soap

@@ -9,8 +9,8 @@ import sys
 from ovirtsdk.api import API
 
 # VSPHERE
-# from psphere.client import Client
 from psphere.managedobjects import VirtualMachine
+from mgmtsystem.virtualcenter import VMWareSystem
 
 # RHOS
 from novaclient.v1_1 import client as novaclient
@@ -19,7 +19,6 @@ from novaclient.v1_1 import client as novaclient
 from utils.conf import cfme_data
 from utils.conf import credentials
 from utils.wait import wait_for
-from utils.mgmt_system import VMWareSystem
 
 
 TIME_NOW = datetime.datetime.now()
@@ -49,7 +48,7 @@ def rhevm_create_api(url, username, password):
         username: username used to log in into rhevm
         password: password used to log in into rhevm
     """
-    apiurl = 'https://%s:443/api' % url
+    apiurl = 'https://{}:443/api'.format(url)
     return API(url=apiurl, username=username, password=password, insecure=True,
                persistent_auth=False)
 
@@ -158,13 +157,13 @@ def rhevm_delete_vm(api, vm_name):
     vm_status = rhevm_vm_status(api, vm_name)
     if vm_status != 'up' and vm_status != 'down':
         # something is wrong, locked image etc
-        exc_msg = "VM status: %s" % vm_status
+        exc_msg = "VM status: {}".format(vm_status)
         raise Exception(exc_msg)
     if vm_status == "up":
-        print "Powering down: %s" % vm.get_name()
+        print("Powering down: {}".format(vm.get_name()))
         vm.stop()
         wait_for(rhevm_is_vm_down, [api, vm_name], fail_condition=False, delay=10, num_sec=120)
-    print "Deleting: %s" % vm_name
+    print("Deleting: {}".format(vm_name))
     vm.delete()
 
 
@@ -179,7 +178,7 @@ def rhevm_delete_template(api, tmp_name):
     if tmp.get_status().state == 'locked':
         raise Exception("Template is locked.")
     elif tmp.get_status().state == 'ok':
-        print "Deleting: %s" % tmp.get_name()
+        print("Deleting: {}".format(tmp.get_name()))
         tmp.delete()
 
 
@@ -195,15 +194,15 @@ def vsphere_delete_vm(api, vm_name):
     vm_status = vsphere_vm_status(api, vm_name)
     if vm_status != 'poweredOn' and vm_status != 'poweredOff':
         # something is wrong, locked image etc
-        exc_msg = "VM status: %s" % vm_status
+        exc_msg = "VM status: {}".format(vm_status)
         raise Exception(exc_msg)
-    print "status: " + vm_status
+    print("status: {}".format(vm_status))
     if vm_status == "poweredOn":
-        print "Powering down: %s" % vm.name
+        print("Powering down: {}".format(vm.name))
         vm.PowerOffVM_Task()
         wait_for(vsphere_is_vm_down, [api, vm_name], fail_condition=False, delay=10,
                  num_sec=120)
-    print "Deleting: %s" % vm_name
+    print("Deleting: {}".format(vm_name))
     vm.Destroy_Task()
 
 
@@ -211,7 +210,7 @@ def rhos_delete_vm(api, vm_name):
     vms = api.servers.list()
     for vm in vms:
         if vm.name == vm_name:
-            print "Deleting: %s" % vm_name
+            print("Deleting: {}".format(vm_name))
             vm.delete()
 
 
@@ -255,7 +254,7 @@ def rhevm_check_with_api(api, rhevm_use_start_time, run_time, text):
             crt = creation_time.replace(tzinfo=None)
             runtime = TIME_NOW - crt
             if runtime.days >= run_time and is_affected(vm_name, text):
-                print "To delete: %s with runtime: %s" % (vm_name, runtime.days)
+                print("To delete: {} with runtime: {}".format(vm_name, runtime.days))
                 vms_to_delete.append(vm_name)
         else:
             if rhevm_is_vm_up(api, vm_name):
@@ -263,7 +262,7 @@ def rhevm_check_with_api(api, rhevm_use_start_time, run_time, text):
                 stt = start_time.replace(tzinfo=None)
                 runtime = TIME_NOW - stt
                 if runtime.days >= run_time and is_affected(vm_name, text):
-                    print "To delete: %s with runtime: %s" % (vm_name, runtime.days)
+                    print("To delete: {} with runtime: {}".format(vm_name, runtime.days))
                     vms_to_delete.append(vm_name)
     return (vms_to_delete, templates_to_delete)
 
@@ -292,7 +291,7 @@ def vsphere_check_with_api(api, run_time, text):
         vm_name = vm.name
         running_for = vm.summary.quickStats.uptimeSeconds / SEC_IN_DAY
         if running_for >= run_time and is_affected(vm_name, text):
-            print "To delete: %s with runtime: %s" % (vm_name, running_for)
+            print("To delete: {} with runtime: {}".format(vm_name, running_for))
             vms_to_delete.append(vm_name)
     return (vms_to_delete, templates_to_delete)
 
@@ -316,7 +315,7 @@ def rhos_check_with_api(api, run_time, text):
                                     int(res[0][4]), int(res[0][5]))
         runtime = TIME_NOW - vm_time
         if runtime.days >= run_time and is_affected(vm_name, text):
-            print "To delete: %s with runtime: %s" % (vm_name, runtime.days)
+            print("To delete: {} with runtime: {}".format(vm_name, runtime.days))
             vms_to_delete.append(vm_name)
     return vms_to_delete
 
@@ -329,7 +328,7 @@ def main(args, providers):
         if 'ec2' in providers[provider]['type']:
             continue
 
-        print "=== Starting provider %s ===" % provider
+        print("=== Starting provider {} ===".format(provider))
 
         creds = providers[provider]['credentials']
         username = credentials[creds]['username']
@@ -341,8 +340,8 @@ def main(args, providers):
             try:
                 rhevm_api = rhevm_create_api(rhevm_url, username, password)
             except Exception, e:
-                print "RHEVM: Failed to establish connection. Skipping this provider..."
-                print str(e)
+                print("RHEVM: Failed to establish connection. Skipping this provider...")
+                print(str(e))
                 was_exception = True
                 continue
             # check for old vms and templates
@@ -351,8 +350,8 @@ def main(args, providers):
                                                                        args.rhevm_use_start_time,
                                                                        args.run_time, args.text)
             except Exception, e:
-                print "RHEVM: Failed to check for vms using api. Skipping this provider..."
-                print str(e)
+                print("RHEVM: Failed to check for vms using api. Skipping this provider...")
+                print(str(e))
                 was_exception = True
                 continue
             # delete old vms
@@ -360,10 +359,10 @@ def main(args, providers):
                 try:
                     pass
                     rhevm_delete_vm(rhevm_api, vm_name)
-                    print "Dryrun Delete: %s" % vm_name
+                    print("Dryrun Delete: {}".format(vm_name))
                 except Exception, e:
-                    print "RHEVM: Failed to delete vm. Skipping '%s'" % vm_name
-                    print str(e)
+                    print("RHEVM: Failed to delete vm. Skipping '{}'".format(vm_name))
+                    print(str(e))
                     was_exception = True
                     continue
             # delete templates older than MRU_NIGHTLIES days.
@@ -371,10 +370,10 @@ def main(args, providers):
                 try:
                     pass
                     rhevm_delete_template(rhevm_api, tmp_name)
-                    print "Dryrun Delete: %s" % tmp_name
+                    print("Dryrun Delete: {}".format(tmp_name))
                 except Exception, e:
-                    print "RHEVM: Failed to delete template. Skipping '%s'" % tmp_name
-                    print str(e)
+                    print("RHEVM: Failed to delete template. Skipping '{}'".format(tmp_name))
+                    print(str(e))
                     was_exception = True
                     continue
 
@@ -384,8 +383,8 @@ def main(args, providers):
             try:
                 vsphere_api = vsphere_create_api(vsphere_url, username, password)
             except Exception, e:
-                "VSPHERE: Failed to establish connection. Skipping this provider..."
-                print str(e)
+                print("VSPHERE: Failed to establish connection. Skipping this provider...")
+                print(str(e))
                 was_exception = True
                 continue
             # check for old vms
@@ -393,8 +392,8 @@ def main(args, providers):
                 delete_vm_list, delete_tmp_list = vsphere_check_with_api(vsphere_api,
                                                                          args.run_time, args.text)
             except Exception, e:
-                print "VSPHERE: Failed to check for vms using api. Skipping this provider..."
-                print str(e)
+                print("VSPHERE: Failed to check for vms using api. Skipping this provider...")
+                print(str(e))
                 was_exception = True
                 continue
             # delete old vms
@@ -402,20 +401,20 @@ def main(args, providers):
                 try:
                     pass
                     vsphere_delete_vm(vsphere_api, vm_name)
-                    print "Dryrun Delete: %s" % vm_name
+                    print("Dryrun Delete: {}".format(vm_name))
                 except Exception, e:
-                    print "VSPHERE: Failed to delete vm. Skipping '%s'" % vm_name
-                    print str(e)
+                    print("VSPHERE: Failed to delete vm. Skipping '{}'".format(vm_name))
+                    print(str(e))
                     was_exception = True
                     continue
             for tmp_name in delete_tmp_list:
                 try:
                     pass
                     vsphere_delete_vm(vsphere_api, tmp_name)
-                    print "Dryrun Delete: %s" % tmp_name
+                    print("Dryrun Delete: {}".format(tmp_name))
                 except Exception, e:
-                    print "VSPHERE: Failed to delete template. Skipping '%s'" % tmp_name
-                    print str(e)
+                    print("VSPHERE: Failed to delete template. Skipping '{}'".format(tmp_name))
+                    print(str(e))
                     was_exception = True
                     continue
         if 'openstack' in providers[provider]['type']:
@@ -425,16 +424,16 @@ def main(args, providers):
             try:
                 rhos_api = rhos_create_api(rhos_auth_url, username, password, rhos_project_id)
             except Exception, e:
-                print "RHOS: Failed to establish connection. Skipping this provider..."
-                print str(e)
+                print("RHOS: Failed to establish connection. Skipping this provider...")
+                print(str(e))
                 was_exception = True
                 continue
             # check for old vms
             try:
                 delete_vm_list = rhos_check_with_api(rhos_api, args.run_time, args.text)
             except Exception, e:
-                print "RHOS: Failed to check for vms using api. Skipping this provider..."
-                print str(e)
+                print("RHOS: Failed to check for vms using api. Skipping this provider...")
+                print(str(e))
                 was_exception = True
                 continue
             # delete old vms
@@ -443,12 +442,12 @@ def main(args, providers):
                     pass
                     rhos_delete_vm(rhos_api, vm_name)
                 except Exception, e:
-                    print "RHOS: Failed to delete vm. Skipping '%s'" % vm_name
-                    print str(e)
+                    print("RHOS: Failed to delete vm. Skipping '{}'".format(vm_name))
+                    print(str(e))
                     was_exception = True
                     continue
 
-        print "=== End of provider %s ===" % provider
+        print("=== End of provider {} ===".format(provider))
 
     return was_exception
 

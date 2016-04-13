@@ -29,7 +29,6 @@ def vmware_vm(request, vmware_provider):
 
 
 @pytest.mark.meta(blockers=[1155284])
-@pytest.mark.ignore_stream("5.2")
 def test_scope_windows_registry_stuck(request, setup_a_provider):
     """If you provide Scope checking windows registry, it messes CFME up. Recoverable."""
     policy = VMCompliancePolicy(
@@ -85,7 +84,7 @@ def test_folder_field_scope(request, vmware_provider, vmware_vm):
     for tag in tags:
         if "Parent Folder Path (VMs & Templates)" in tag:
             folder = tag.split(":", 1)[-1].strip()
-            logger.info("Detected folder: {}".format(folder))
+            logger.info("Detected folder: %s", folder)
             break
     else:
         pytest.fail("Could not read the folder from the tags:\n{}".format(repr(tags)))

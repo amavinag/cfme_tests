@@ -5,10 +5,10 @@ Before you start copypasting ...
 --------------------------------
 Welcome to the Getting Started Guide. The CFME QE team is glad that you have decided to read this
 page that will help you understand how ``cfme_tests`` interacts with the appliances. There are some
-important informations contained within this text, so we would like you to spend some time to
+important information contained within this text, so we would like you to spend some time to
 carefully read this page from beginning to the end. That will make you familiarize with the process
 and will minimize the chance of doing it wrong. Then you can proceed the shortest way using the
-setup script.
+setup and execution scripts.
 
 Setup
 -----
@@ -94,6 +94,18 @@ Detailed steps (manual environment setup):
 
     * On RHEL and derived systems, it will say the zeromq package is not available but that is ok.
 
+* Activate the virtual environment:
+
+To activate the virtualenv, the ``bin/activate`` script must be sourced. Bear in mind that you
+should have the two options added in the ``bin/activate`` script BEFORE you source it, otherwise it
+will not work.
+
+.. code-block:: bash
+
+   #Bash example:
+   `cd /path/to/virtualenv'
+   source bin/activate or . bin/activate
+
 * Install python dependencies:
 
   * ``PYCURL_SSL_LIBRARY=nss pip install -Ur /path/to/virtualenv/cfme_tests/requirements.txt``
@@ -123,26 +135,39 @@ Detailed steps (manual environment setup):
 * In either case, check your processes sometimes, the artifactor process likes to hang when forced
   to quit, but it can also happen when it ends normally, though it is not too common.
 
-Activating the virtualenv
--------------------------
-
-To activate the virtualenv, the ``bin/activate`` script must be sourced. Bear in mind that you
-should have the two options added in the ``bin/activate`` script BEFORE you source it, otherwise it
-will not work.
-
-.. code-block:: bash
-
-   #Bash example:
-   `cd /path/to/virtualenv'
-   source bin/activate or . bin/activate
-
 Testing Framework
 -----------------
 
 The testing framework being used is `py.test <http://pytest.org/latest>`_
 
+Execution script
+-----------------
+An execution script (cfme_test.sh) is provided. This script handles orchestration of
+docker, virtualenv, and cfme_test.
+
+.. code-block:: bash
+
+   #Bash example:
+   cd /path/to/cfme_test
+   ./cfme_test.sh
+
+Navigating within the console:
+
+* Command mode: ctrl+shift+b
+
+  - up/down to change pane
+
+  - '[' to scroll within a pane
+
+    + press the 'Esc' key to exit scrolling
+
+
+
+
+More tmux commands can be found here: https://tmuxcheatsheet.com/
+
 Using the testing framework (for newbies or non-CFMEQE core people)
---------------------------------------------------------------
+-------------------------------------------------------------------
 Our team relies on a lot of internal tools that simplify life to the QEs. If eg. a developer would
 like to run ``cfme_tests`` on his/her system, here are some tools and tips that should get you
 started as quickly as possible:

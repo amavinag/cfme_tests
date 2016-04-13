@@ -11,20 +11,16 @@ from cfme.services import requests
 from cfme.web_ui import flash
 from utils import testgen
 from utils.wait import wait_for
-from utils import version
 
 pytestmark = [
     pytest.mark.meta(server_roles="+automate"),
     pytest.mark.usefixtures('logged_in', 'vm_name', 'uses_infra_providers'),
     pytest.mark.long_running,
-    pytest.mark.ignore_stream("5.2")
 ]
 
 
-def pytest_generate_tests(metafunc):
-    argnames, argvalues, idlist = testgen.provider_by_type(
-        metafunc, ['virtualcenter'], 'provisioning')
-    metafunc.parametrize(argnames, argvalues, ids=idlist, scope='module')
+pytest_generate_tests = testgen.generate(testgen.provider_by_type, ['virtualcenter'],
+    scope="module")
 
 
 @pytest.yield_fixture(scope="function")
@@ -56,7 +52,7 @@ def catalog():
 
 
 @pytest.yield_fixture(scope="function")
-def catalog_item(provider, provisioning, vm_name, dialog, catalog):
+def catalog_item(provider, vm_name, dialog, catalog, provisioning):
     template, host, datastore, iso_file, catalog_item_type = map(provisioning.get,
         ('template', 'host', 'datastore', 'iso_file', 'catalog_item_type'))
 
@@ -69,11 +65,7 @@ def catalog_item(provider, provisioning, vm_name, dialog, catalog):
     if provider.type == 'rhevm':
         provisioning_data['provision_type'] = 'Native Clone'
         provisioning_data['vlan'] = provisioning['vlan']
-        catalog_item_type = version.pick({
-            version.LATEST: "RHEV",
-            '5.3': "RHEV",
-            '5.2': "Redhat"
-        })
+        catalog_item_type = "RHEV"
     elif provider.type == 'virtualcenter':
         provisioning_data['provision_type'] = 'VMware'
     item_name = fauxfactory.gen_alphanumeric()

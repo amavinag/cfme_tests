@@ -39,13 +39,12 @@ discover_form = Form(
 properties_form = Form(
     fields=[
         ('type_select', {version.LOWEST: Select('select#server_emstype'),
-                         '5.5': AngularSelect("emstype")}),
+            '5.5': AngularSelect("emstype")}),
         ('name_text', Input("name")),
         ('hostname_text', Input("hostname")),
         ('ipaddress_text', Input("ipaddress"), {"removed_since": "5.4.0.0.15"}),
-        ('amazon_region_select', {version.LOWEST: Select("select#hostname"),
-                                  "5.3.0.14": Select("select#provider_region"),
-                                  "5.5": AngularSelect("provider_region")}),
+        ('amazon_region_select', {version.LOWEST: Select("select#provider_region"),
+            "5.5": AngularSelect("provider_region")}),
         ('api_port', Input(
             {
                 version.LOWEST: "port",
@@ -101,6 +100,8 @@ class Provider(Pretty, CloudInfraProvider):
     STATS_TO_MATCH = ['num_template', 'num_vm']
     string_name = "Cloud"
     page_name = "clouds"
+    instances_page_name = "clouds_instances_by_provider"
+    templates_page_name = "clouds_images_by_provider"
     quad_name = "cloud_prov"
     vm_name = "Instances"
     template_name = "Images"
@@ -177,10 +178,7 @@ def get_all_providers(do_not_navigate=False):
     if not do_not_navigate:
         sel.force_navigate('clouds_providers')
     providers = set([])
-    link_marker = version.pick({
-        version.LOWEST: "ext_management_system",
-        "5.2.5": "ems_cloud"
-    })
+    link_marker = "ems_cloud"
     for page in paginator.pages():
         for title in sel.elements("//div[@id='quadicon']/../../../tr/td/a[contains(@href,"
                 "'{}/show')]".format(link_marker)):

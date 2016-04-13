@@ -7,13 +7,13 @@ from cfme.web_ui import ButtonGroup, form_buttons
 
 pytestmark = [
     pytest.mark.usefixtures('logged_in'),
-    pytest.mark.ignore_stream("5.2", "5.3", "upstream"),
+    pytest.mark.ignore_stream("upstream"),
 ]
 
 
 def pytest_generate_tests(metafunc):
     argnames, argvalues, idlist = testgen.provider_by_type(
-        metafunc, ['ec2'], 'provisioning')
+        metafunc, ['ec2'])
     metafunc.parametrize(argnames, argvalues, ids=idlist, scope='module')
 
 
@@ -27,7 +27,7 @@ def set_grid_view(name):
 
 
 @pytest.fixture(scope="function")
-def stack(setup_provider, provisioning):
+def stack(setup_provider, provider, provisioning):
     set_grid_view("Stacks")
     stackname = provisioning['stack']
     stack = Stack(stackname)

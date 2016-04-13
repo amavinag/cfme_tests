@@ -14,14 +14,14 @@ from datetime import datetime
 from utils import testgen
 from utils.log import logger
 from utils.wait import wait_for
-from utils import version, browser
+from utils import browser
 from utils.version import current_version
+from utils.browser import ensure_browser_open
 
 pytestmark = [
     pytest.mark.usefixtures("vm_name"),
     pytest.mark.meta(server_roles="+automate"),
     pytest.mark.long_running,
-    pytest.mark.ignore_stream("5.2")
 ]
 
 
@@ -31,14 +31,13 @@ def needs_firefox():
 
     I recommend putting it in the first place.
     """
+    ensure_browser_open()
     if browser.browser().name != "firefox":
         pytest.skip(msg="This test needs firefox to run")
 
 
-def pytest_generate_tests(metafunc):
-    argnames, argvalues, idlist = testgen.provider_by_type(
-        metafunc, ['virtualcenter'], 'provisioning')
-    metafunc.parametrize(argnames, argvalues, ids=idlist, scope='module')
+pytest_generate_tests = testgen.generate(testgen.provider_by_type, ['virtualcenter'],
+    scope="module")
 
 
 @pytest.fixture(scope="function")
@@ -58,7 +57,7 @@ def dialog():
                                    box_label="box_" + fauxfactory.gen_alphanumeric(),
                                    box_desc="my box desc")
     service_dialog.create(element_data)
-    flash.assert_success_message('Dialog "%s" was added' % dialog)
+    flash.assert_success_message('Dialog "{}" was added'.format(dialog))
     return service_dialog
 
 
@@ -72,7 +71,7 @@ def catalog():
 
 
 @pytest.fixture(scope="function")
-def catalog_item(provider, provisioning, vm_name, dialog, catalog):
+def catalog_item(provider, vm_name, dialog, catalog, provisioning):
     template, host, datastore, iso_file, catalog_item_type = map(provisioning.get,
         ('template', 'host', 'datastore', 'iso_file', 'catalog_item_type'))
 
@@ -85,11 +84,7 @@ def catalog_item(provider, provisioning, vm_name, dialog, catalog):
     if provider.type == 'rhevm':
         provisioning_data['provision_type'] = 'Native Clone'
         provisioning_data['vlan'] = provisioning['vlan']
-        catalog_item_type = version.pick({
-            version.LATEST: "RHEV",
-            '5.3': "RHEV",
-            '5.2': "Redhat"
-        })
+        catalog_item_type = "RHEV"
     elif provider.type == 'virtualcenter':
         provisioning_data['provision_type'] = 'VMware'
     item_name = fauxfactory.gen_alphanumeric()
@@ -114,8 +109,7 @@ def myservice(setup_provider, provider, catalog_item, request):
     catalog_item.create()
     service_catalogs = ServiceCatalogs("service_name")
     service_catalogs.order(catalog_item.catalog, catalog_item)
-    logger.info('Waiting for cfme provision request for service {}'
-        .format(catalog_item.name))
+    logger.info('Waiting for cfme provision request for service %s', catalog_item.name)
     row_description = catalog_item.name
     cells = {'Description': row_description}
     row, __ = wait_for(requests.wait_for_request, [cells, True],

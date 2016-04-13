@@ -59,7 +59,7 @@ def main():
     # Used by the cloud provs
     flavors = cfme_data['appliance_provisioning']['default_flavors'].get(provider_type, [])
 
-    logger.info('Connecting to %s', args.provider)
+    logger.info('Connecting to {}'.format(args.provider))
 
     if args.destroy:
         # TODO: destroy should be its own script
@@ -117,28 +117,30 @@ def main():
     elif provider_type == "virtualcenter":
         if "allowed_datastores" in provider_dict:
             deploy_args["allowed_datastores"] = provider_dict["allowed_datastores"]
+    elif provider_type == 'scvmm':
+        deploy_args["host_group"] = provider_dict["provisioning"]['host_group']
 
     # Do it!
     try:
-        logger.info('Cloning %s to %s on %s', args.template, args.vm_name, args.provider)
+        logger.info('Cloning {} to {} on {}'.format(args.template, args.vm_name, args.provider))
         provider.deploy_template(**deploy_args)
     except Exception as e:
         logger.exception(e)
         logger.error('Clone failed')
         if args.cleanup:
-            logger.info('attempting to destroy %s' % args.vm_name)
+            logger.info('attempting to destroy {}'.format(args.vm_name))
             destroy_vm(provider, args.vm_name)
             return 12
 
     if provider.is_vm_running(args.vm_name):
-        logger.info("VM %s is running" % args.vm_name)
+        logger.info("VM {} is running".format(args.vm_name))
     else:
         logger.error("VM is not running")
         return 10
 
     ip, time_taken = wait_for(provider.get_ip_address, [args.vm_name], num_sec=1200,
                               fail_condition=None)
-    logger.info('IP Address returned is %s', ip)
+    logger.info('IP Address returned is {}'.format(ip))
 
     if args.configure:
         logger.info('Configuring appliance, this can take a while.')
@@ -147,10 +149,10 @@ def main():
 
     if args.outfile:
         with open(args.outfile, 'w') as outfile:
-            outfile.write("appliance_ip_address=%s\n" % ip)
+            outfile.write("appliance_ip_address={}\n".format(ip))
 
     # In addition to the outfile, drop the ip address on stdout for easy parsing
-    print ip
+    print(ip)
 
 if __name__ == "__main__":
     sys.exit(main())

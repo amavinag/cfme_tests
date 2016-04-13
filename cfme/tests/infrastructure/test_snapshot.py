@@ -17,7 +17,7 @@ from utils.wait import wait_for
 pytestmark = [pytest.mark.long_running]
 
 
-pytest_generate_tests = testgen.generate(testgen.infra_providers, 'full_template', scope="module")
+pytest_generate_tests = testgen.generate(testgen.infra_providers, scope="module")
 
 
 @pytest.fixture(scope="module")
@@ -85,7 +85,6 @@ def test_verify_revert_snapshot(test_vm, provider, soft_assert, register_event, 
     """
     snapshot1 = new_snapshot(test_vm)
     ip = snapshot1.vm.provider.mgmt.get_ip_address(snapshot1.vm.name)
-    print ip
     ssh_kwargs = {
         'username': credentials[provider.data['full_template']['creds']]['username'],
         'password': credentials[provider.data['full_template']['creds']]['password'],

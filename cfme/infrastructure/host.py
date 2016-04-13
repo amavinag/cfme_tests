@@ -36,6 +36,8 @@ from utils.pretty import Pretty
 # Page specific locators
 details_page = Region(infoblock_type='detail')
 
+page_title_loc = '//div[@id="center_div" or @id="main-content"]//h1'
+
 properties_form = Form(
     fields=[
         ('name_text', Input("name")),
@@ -69,12 +71,7 @@ credential_form = Form(
             '5.5': AngularSelect('validate_id')}),
     ])
 
-manage_policies_tree = CheckboxTree(
-    {
-        version.LOWEST: "//div[@id='treebox']/div/table",
-        "5.3": "//div[@id='protect_treebox']/ul"
-    }
-)
+manage_policies_tree = CheckboxTree("//div[@id='protect_treebox']/ul")
 
 drift_table = CheckboxTable({
     version.LOWEST: "//table[@class='style3']",
@@ -85,6 +82,7 @@ host_add_btn = {
     version.LOWEST: FormButton('Add this Host'),
     "5.5": FormButton("Add")
 }
+default_host_filter_btn = FormButton('Set the current filter as my default')
 cfg_btn = partial(tb.select, 'Configuration')
 pol_btn = partial(tb.select, 'Policy')
 pow_btn = partial(tb.select, 'Power')
@@ -212,27 +210,8 @@ class Host(Updateable, Pretty):
         change_stored_password()
         fill(credential_form, updates.get('credentials', None), validate=validate_credentials)
 
-        # Workaround for issue with form_button staying dimmed.
-        try:
-            logger.debug("Trying to save update for host with id: " + str(self.get_db_id))
-            self._submit(cancel, self.forced_saved)
-            logger.debug("save worked, no exception")
-        except Exception as e:
-            logger.debug("exception detected: " + str(e))
-            sel.browser().execute_script(
-                "$j.ajax({type: 'POST', url: '/host/form_field_changed/%s',"
-                " data: {'default_userid':'%s'}})" %
-                (str(sel.current_url().split('/')[5]), updates.get('credentials', None).principal))
-            sel.browser().execute_script(
-                "$j.ajax({type: 'POST', url: '/host/form_field_changed/%s',"
-                " data: {'default_password':'%s'}})" %
-                (str(sel.current_url().split('/')[5]), updates.get('credentials', None).secret))
-            sel.browser().execute_script(
-                "$j.ajax({type: 'POST', url: '/host/form_field_changed/%s',"
-                " data: {'default_verify':'%s'}})" %
-                (str(sel.current_url().split('/')[5]),
-                    updates.get('credentials', None).verify_secret))
-            self._submit(cancel, self.forced_saved)
+        logger.debug("Trying to save update for host with id: " + str(self.get_db_id))
+        self._submit(cancel, self.forced_saved)
 
     def delete(self, cancel=True):
         """
@@ -285,8 +264,8 @@ class Host(Updateable, Pretty):
 
     def _on_detail_page(self):
         """ Returns ``True`` if on the hosts detail page, ``False`` if not."""
-        return sel.is_displayed('//div[@class="dhtmlxInfoBarLabel-2"][contains(., "%s")]'
-                                % self.name)
+        return sel.is_displayed(
+            '//div[@class="dhtmlxInfoBarLabel-2"][contains(., "{}")]'.format(self.name))
 
     @property
     def exists(self):
@@ -345,8 +324,7 @@ class Host(Updateable, Pretty):
     def get_datastores(self):
         """ Gets list of all datastores used by this host"""
         sel.force_navigate('infrastructure_host', context={'host': self})
-        list_acc.select('Relationships', version.pick({version.LOWEST: 'Show Datastores',
-                                                       '5.3': 'Show all Datastores'}))
+        list_acc.select('Relationships', 'Show all Datastores')
 
         datastores = set([])
         for page in paginator.pages():

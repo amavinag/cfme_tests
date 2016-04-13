@@ -7,8 +7,6 @@ from cfme.infrastructure.config_management import ConfigManager
 from utils import error
 from utils.update import update
 
-pytestmark = [pytest.mark.ignore_stream("5.2", "5.3")]
-
 
 @pytest.fixture
 def config_manager_obj(cfme_data):
@@ -68,6 +66,7 @@ def test_config_manager_add_invalid_url(request, config_manager_obj):
         config_manager_obj.create()
 
 
+@pytest.mark.meta(blockers=["BZ#1319751"])
 def test_config_manager_add_invalid_creds(request, config_manager_obj):
     request.addfinalizer(config_manager_obj.delete)
     config_manager_obj.credentials.principal = 'invalid_user'

@@ -54,8 +54,7 @@ def providers(request, provider_id=None):
         except ObjectDoesNotExist:
             messages.warning(request, "Provider '{}' does not exist.".format(provider_id))
             return redirect("providers")
-    providers = Provider.objects.order_by("id")
-    complete_usage = Provider.complete_user_usage()
+    providers = Provider.objects.filter(hidden=False).order_by("id")
     return render(request, 'appliances/providers.html', locals())
 
 
@@ -91,28 +90,38 @@ def templates(request, group_id=None, prov_id=None):
     prepared_table = []
     zstream_rowspans = {}
     version_rowspans = {}
+    date_version_rowspans = {}
     items = group.zstreams_versions.items()
     items.sort(key=lambda pair: Version(pair[0]), reverse=True)
     for zstream, versions in items:
         for version in versions:
-            for provider in Provider.objects.all():
-                for template in Template.objects.filter(
-                        provider=provider, template_group=group, version=version, exists=True,
-                        ready=True):
-                    if zstream in zstream_rowspans:
-                        zstream_rowspans[zstream] += 1
-                        zstream_append = None
-                    else:
-                        zstream_rowspans[zstream] = 1
-                        zstream_append = zstream
+            for template in Template.objects.filter(
+                    template_group=group, version=version, exists=True,
+                    ready=True).order_by('-date', 'provider'):
+                if zstream in zstream_rowspans:
+                    zstream_rowspans[zstream] += 1
+                    zstream_append = None
+                else:
+                    zstream_rowspans[zstream] = 1
+                    zstream_append = zstream
 
-                    if version in version_rowspans:
-                        version_rowspans[version] += 1
-                        version_append = None
-                    else:
-                        version_rowspans[version] = 1
-                        version_append = version
-                    prepared_table.append((zstream_append, version_append, provider, template))
+                if version in version_rowspans:
+                    version_rowspans[version] += 1
+                    version_append = None
+                else:
+                    version_rowspans[version] = 1
+                    version_append = version
+
+                datetuple = (template.date, version)
+                if datetuple in date_version_rowspans:
+                    date_version_rowspans[datetuple] += 1
+                    date_append = None
+                else:
+                    date_version_rowspans[datetuple] = 1
+                    date_append = template.date
+                prepared_table.append((
+                    zstream_append, version_append, date_append, datetuple, template.provider,
+                    template))
     return render(request, 'appliances/templates.html', locals())
 
 
@@ -442,7 +451,7 @@ def set_pool_description(request):
 
 
 def delete_template_provider(request):
-    if not request.user.is_authenticated():
+    if not request.user.is_authenticated() or not request.user.is_superuser:
         return HttpResponseForbidden("Only authenticated superusers can operate this action.")
     template_id = request.POST["template_id"]
     try:
@@ -533,9 +542,12 @@ def vms(request, current_provider=None):
 def vms_table(request, current_provider=None):
     if not request.user.is_authenticated():
         return go_home(request)
-    manager = get_mgmt(current_provider)
-    vms = sorted(manager.list_vm())
-    return render(request, 'appliances/vms/_list.html', locals())
+    try:
+        manager = get_mgmt(current_provider)
+        vms = sorted(manager.list_vm())
+        return render(request, 'appliances/vms/_list.html', locals())
+    except Exception as e:
+        return HttpResponse('{}: {}'.format(type(e).__name__, str(e)), content_type="text/plain")
 
 
 def power_state(request, current_provider):
@@ -626,3 +638,71 @@ def provider_enable_disable(request, provider_id, disabled=None):
     messages.success(
         request, 'Provider {}, {}.'.format(provider_id, "disabled" if disabled else "enabled"))
     return go_back_or_home(request)
+
+
+def check_appliance(request, provider_id, appliance_name):
+    try:
+        appliance = Appliance.objects.get(name=appliance_name, template__provider=provider_id)
+    except ObjectDoesNotExist:
+        return json_response(None)
+    owner = appliance.owner
+    if owner is not None:
+        owner = owner.username
+    data = {
+        'stream': appliance.template.template_group.id,
+        'version': appliance.template.version,
+        'date': appliance.template.date.strftime('%Y-%m-%d'),
+        'preconfigured': appliance.template.preconfigured,
+        'owner': owner,
+    }
+    return json_response(data)
+
+
+def check_template(request, provider_id, template_name):
+    try:
+        template = Template.objects.get(name=template_name, provider=provider_id)
+    except ObjectDoesNotExist:
+        return json_response(None)
+    data = {
+        'stream': template.template_group.id,
+        'version': template.version,
+        'date': template.date.strftime('%Y-%m-%d'),
+        'preconfigured': template.preconfigured,
+    }
+    return json_response(data)
+
+
+def check_pool(request, pool_id):
+    try:
+        pool = AppliancePool.objects.get(id=pool_id)
+    except ObjectDoesNotExist:
+        return json_response(None)
+    data = {
+        'description': pool.description,
+        'stream': pool.group.id,
+        'version': pool.version,
+        'date': pool.date.strftime('%Y-%m-%d'),
+        'preconfigured': pool.preconfigured,
+        'finished': pool.finished,
+        'owner': pool.owner.username,
+        'appliances': [[a.name, a.template.provider.id] for a in pool.appliances]
+    }
+    return json_response(data)
+
+
+def check_pools(request):
+    data = []
+    for pool in AppliancePool.objects.all():
+        pool_data = {
+            'description': pool.description,
+            'id': pool.id,
+            'stream': pool.group.id,
+            'version': pool.version,
+            'date': pool.date.strftime('%Y-%m-%d'),
+            'preconfigured': pool.preconfigured,
+            'finished': pool.finished,
+            'owner': pool.owner.username,
+            'appliances': [[a.name, a.template.provider.id] for a in pool.appliances]
+        }
+        data.append(pool_data)
+    return json_response(data)

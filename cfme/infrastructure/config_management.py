@@ -1,4 +1,5 @@
 from functools import partial
+from cached_property import cached_property
 
 import ui_navigate as nav
 
@@ -11,7 +12,7 @@ import cfme.web_ui.toolbar as tb
 from cfme.web_ui import (
     accordion, Quadicon, Form, Input, fill, form_buttons, SplitTable, mixins
 )
-from utils import lazycache, version, conf
+from utils import version, conf
 from utils.log import logger
 from utils.pretty import Pretty
 from utils.update import Updateable
@@ -158,7 +159,7 @@ class ConfigManager(Updateable, Pretty):
         """Navigates to the manager's detail page"""
         sel.force_navigate('infrastructure_config_manager_detail', context={'manager': self})
 
-    @lazycache
+    @cached_property
     def type(self):
         """Returns presumed type of the manager based on CFME version
 
@@ -184,8 +185,8 @@ class ConfigManager(Updateable, Pretty):
         def config_profiles_loaded():
             config_profiles_names = [prof.name for prof in self.config_profiles]
             logger.info(
-                "UI: {}\nYAML: {}"
-                .format(set(config_profiles_names), set(self.yaml_data['config_profiles'])))
+                "UI: %s\nYAML: %s",
+                set(config_profiles_names), set(self.yaml_data['config_profiles']))
             return all(
                 [cp in config_profiles_names for cp in self.yaml_data['config_profiles']])
 
@@ -251,7 +252,7 @@ class ConfigManager(Updateable, Pretty):
     def exists(self):
         """Returns whether the manager exists in the UI or not"""
         sel.force_navigate('infrastructure_config_managers')
-        if (Quadicon.any_present and
+        if (Quadicon.any_present() and
                 Quadicon('{} Configuration Manager'.format(self.name), None).exists):
             return True
         return False
