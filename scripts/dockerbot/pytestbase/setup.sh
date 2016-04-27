@@ -151,6 +151,7 @@ if [ -n "$PROVIDER" ]; then
     IP_ADDRESS=$(cat /appliance_ip | cut -d= -f2)
     APPLIANCE=https://$IP_ADDRESS
 fi
+export APPLIANCE=${APPLIANCE-"None"}
 log $APPLIANCE
 
 # Now fill out the env yaml with ALL THE THINGS
@@ -191,6 +192,9 @@ trackerbot:
 EOF
 
 run_n_log "cat $CFME_REPO_DIR/conf/env.local.yaml"
+
+# Remove .pyc files
+run_n_log "find $CFME_REPO_DIR -name \"*.pyc\" -exec rm -rf {} \;"
 
 set +e
 

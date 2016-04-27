@@ -9,7 +9,9 @@ from jinja2 import Environment, FileSystemLoader
 from urllib2 import urlopen, HTTPError
 
 from utils import trackerbot
+from utils.conf import credentials
 from utils.path import template_path, log_path
+from utils.ssh import SSHClient
 from utils.wait import wait_for
 
 template_env = Environment(
@@ -25,12 +27,22 @@ def parse_cmd_line():
     parser.add_argument("--stream", dest="stream",
                         help="stream to generate the template test result")
     parser.add_argument("--template", dest="appliance_template",
-                        help="appliance/latest template name",
-                        default=None)
+                        help="appliance/latest template name")
+    parser.add_argument("--provider", dest="provider",
+                        help="provider under test")
     parser.add_argument("--output", dest="output", help="target file name",
                         default=log_path.join('template_tester_results.log').strpath)
     args = parser.parse_args()
     return args
+
+
+def make_ssh_client(rhevip, sshname, sshpass):
+    connect_kwargs = {
+        'username': sshname,
+        'password': sshpass,
+        'hostname': rhevip
+    }
+    return SSHClient(**connect_kwargs)
 
 
 def get_latest_tested_template_on_stream(api, template_stream_name, template_name):
@@ -158,7 +170,8 @@ def wait_for_templates_on_providers(api, stream, template):
         print('wait for templates upload to providers')
         wait_for(templates_uploaded_on_providers,
                  [api, stream, template], fail_condition=False, delay=5, timeout='40m')
-    except Exception:
+    except Exception as e:
+        print(e)
         return False
 
 
@@ -167,9 +180,41 @@ def get_untested_templates(api, stream_group, appliance_template=None):
         template__group__name=stream_group, template=appliance_template).get('objects', [])
 
 
-def generate_html_report(api, stream, filename, appliance_template):
+def update_template_log(appliance_template, action, provider=None, failed_providers=None):
+    try:
+        trackerbot_ip = re.findall(r'[0-9]+(?:\.[0-9]+){3}', args.trackerbot_url)[0]
+        creds = credentials['host_default']
+        sshclient = make_ssh_client(trackerbot_ip, creds['username'], creds['password'])
+        template_resultlog = log_path.join('template_result.log').strpath
+        if action == 'create':
+            command = 'mkdir -p /home/amavinag/{}'.format(appliance_template)
+            sshclient.run_command(command)
+            sshclient.put_file(template_resultlog, remote_file='/home/amavinag/{}/{}'.format(
+                appliance_template, provider))
+        if action == 'merge':
+            with open(template_resultlog, 'w') as report:
+                command = 'cd /home/amavinag/{}/&&cat {}'.format(appliance_template,
+                                                                 ' '.join(failed_providers))
+                status, output = sshclient.run_command(command)
+                if 'No such file or directory' in output:
+                    command = 'cd /home/amavinag/{}/&&cat *'.format(appliance_template)
+                    status, output = sshclient.run_command(command)
+                report.write(output)
+                report.close()
+        elif action == 'remove':
+            sshclient.run_command('cd /home/amavinag/&&rm -rf {}'.format(
+                appliance_template))
+        sshclient.close()
+    except Exception as e:
+        print(e)
+        return False
 
+
+def generate_html_report(api, stream, filename, appliance_template, provider):
+
+    status = 'PASSED'
     number_of_images_before = len(images_uploaded(stream))
+    update_template_log(appliance_template, action='create', provider=provider)
     if get_untested_templates(api, stream, appliance_template):
         print('report will not be generated, proceed with the next untested provider')
         sys.exit()
@@ -185,6 +230,9 @@ def generate_html_report(api, stream, filename, appliance_template):
     if stream_data and not get_untested_templates(api, stream_data['group_name']):
         print("Found tested template for {}".format(stream))
         print("Gathering tested template data for {}".format(stream))
+        print("Updating the template log")
+        update_template_log(appliance_template, action='merge',
+                            failed_providers=stream_data['failed_on_providers'])
         stream_html = [stream_data['template_name'], stream_data['passed_on_providers'],
                        stream_data['failed_on_providers'], stream_data['group_name'],
                        stream_data['datestamp']]
@@ -273,7 +321,12 @@ def generate_html_report(api, stream, filename, appliance_template):
                           'scvmm providers yet')
                     report.write('\n\nMISSING: SCVMM template is not available on any '
                                  'scvmm providers yet')
-        print("template_tester_results report generated")
+                report.seek(0, 0)
+                if "FAILED" in report.read():
+                    status = "FAILED"
+                report.close()
+        update_template_log(appliance_template, action='remove')
+        print("template_tester_results report generated:{}".format(status))
     else:
         print("No Templates tested on: {}".format(datetime.datetime.now()))
 
@@ -281,6 +334,8 @@ def generate_html_report(api, stream, filename, appliance_template):
 if __name__ == '__main__':
     args = parse_cmd_line()
     api = trackerbot.api(args.trackerbot_url)
-    if not args.stream:
-        sys.exit("stream cannot be None, specify the stream as --stream <stream-name> ")
-    generate_html_report(api, args.stream, args.output, args.appliance_template)
+    if not args.stream or not args.appliance_template:
+        sys.exit("stream and appliance_template "
+                 "cannot be None, specify the stream as --stream <stream-name>"
+                 "and template as --template <template-name>")
+    generate_html_report(api, args.stream, args.output, args.appliance_template, args.provider)
