@@ -551,7 +551,13 @@ def clear_middleware_providers(validate=True):
     total = paginator.rec_total()
     if total > 0:
         logger.info(' Providers exist, so removing all middleware providers')
-        # TODO: remove providers
+        paginator.results_per_page('100')
+        sel.click(paginator.check_all())
+        toolbar.select('Configuration', 'Remove Middleware Providers from the VMDB',
+                       invokes_alert=True)
+        sel.handle_alert()
+        if validate:
+            wait_for_no_middleware_providers()
 
 
 def get_paginator_value():
@@ -598,7 +604,7 @@ def clear_providers():
     clear_infra_providers(validate=False)
     if version.current_version() > '5.5':
         clear_container_providers(validate=False)
-    if version.current_version() >= '5.6':
+    if version.current_version() == version.LATEST:
         clear_middleware_providers(validate=False)
     wait_for_no_cloud_providers()
     wait_for_no_infra_providers()
