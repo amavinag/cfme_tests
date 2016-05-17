@@ -22,7 +22,7 @@ from utils.stats import tol_check
 from utils.update import Updateable
 from utils.varmeth import variable
 
-from . import PolicyProfileAssignable, Taggable
+from . import PolicyProfileAssignable, Taggable, SummaryMixin
 
 cfg_btn = partial(tb.select, 'Configuration')
 
@@ -63,7 +63,7 @@ credential_form = TabStripForm(
     ])
 
 
-class BaseProvider(Taggable, Updateable):
+class BaseProvider(Taggable, Updateable, SummaryMixin):
     # List of constants that every non-abstract subclass must have defined
     STATS_TO_MATCH = []
     string_name = ""
@@ -248,7 +248,8 @@ class BaseProvider(Taggable, Updateable):
                      [refresh_timer],
                      message="is_refreshed",
                      num_sec=1000,
-                     delay=60)
+                     delay=60,
+                     handle_exception=True)
         except Exception:
             # To see the possible error.
             self.load_details(refresh=True)
@@ -445,7 +446,7 @@ class CloudInfraProvider(BaseProvider, PolicyProfileAssignable):
             sel.force_navigate("{}_providers".format(self.page_name))
             q = Quadicon(self.name, self.quad_name)
             creds = q.creds
-            return creds == "checkmark"
+            return "checkmark" in creds
 
         wait_for(_wait_f, num_sec=300, delay=5, message="credentials of {} ok!".format(self.name))
 

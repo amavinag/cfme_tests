@@ -83,13 +83,21 @@ def test_httpd_running(ssh_client):
     assert 'is running' in stdout
 
 
+@pytest.mark.meta(blockers=[1336742])
+@pytest.mark.uncollectif(lambda: version.current_version() < '5.5')
+def test_journald_running(ssh_client):
+    """Verifies systemd-journald service is running on the appliance"""
+    stdout = ssh_client.run_command('systemctl status systemd-journald').output
+    assert 'active (running)' in stdout
+
+
 def test_evm_running(ssh_client):
     """Verifies overall evm service is running on the appliance"""
-    if version.current_version() < '5.6':
+    if version.current_version() < '5.5':
         stdout = ssh_client.run_command('service evmserverd status | grep EVM')[1]
         assert 'started' in stdout.lower()
     else:
-        stdout = ssh_client.run_command('service evmserverd status')[1]
+        stdout = ssh_client.run_command('systemctl status evmserverd')[1]
         assert 'active (running)' in stdout
 
 
