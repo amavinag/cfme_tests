@@ -1140,7 +1140,10 @@ class IPAppliance(object):
         log_callback('restarting evm service')
         with self.ssh_client as ssh:
             if rude:
-                status, msg = ssh.run_command('killall -9 ruby; service evmserverd start')
+                status, msg = ssh.run_command(
+                    'killall -9 ruby;'
+                    'service rh-postgresql94-postgresql stop;'
+                    'service evmserverd start')
             else:
                 status, msg = ssh.run_command('systemctl restart evmserverd')
 
@@ -1229,7 +1232,7 @@ class IPAppliance(object):
             raise exception_class(message)
 
         if vddk_url is None:  # fallback to VDDK 5.5
-            vddk_url = conf.cfme_data.get("basic_info", {}).get("vddk_url", None).get("5_5", None)
+            vddk_url = conf.cfme_data.get("basic_info", {}).get("vddk_url", None).get("v5_5", None)
         if vddk_url is None:
             raise Exception("vddk_url not specified!")
 

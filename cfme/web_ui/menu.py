@@ -179,10 +179,11 @@ class Menu(UINavigate):
                     ('containers_providers', 'Providers'),
                     ('containers_projects', 'Projects'),
                     ('containers_nodes', 'Nodes'),
+                    ('containers_nodes', 'Container Nodes'),
                     ('containers_pods', 'Pods'),
                     ('containers_routes', 'Routes'),
                     ('containers_replicators', 'Replicators'),
-                    ('containers_services', 'Services'),
+                    ('containers_services', 'Container Services'),
                     ('containers_containers', 'Containers'),
                     ('containers_images', 'Container Images'),
                     ('containers_image_registries', 'Image Registries'),
@@ -200,13 +201,6 @@ class Menu(UINavigate):
                     ('infrastructure_pxe', 'PXE'),
                     ('infrastructure_requests', 'Requests'),
                     ('infrastructure_config_management', 'Configuration Management')
-                ),
-                ('middleware', 'Middleware'): (
-                    ('middleware_providers', 'Providers'),
-                    ('middleware_servers', "Middleware Servers"),
-                    ('middleware_deployments', "Middleware Deployments"),
-                    ('middleware_deployments', "Middleware Datasources"),
-                    ('middleware_topology', "Topology"),
                 ),
                 ('control', 'Control'): (
                     ('control_explorer', 'Explorer'),
@@ -277,10 +271,18 @@ class Menu(UINavigate):
                         ('infrastructure_config_management', 'Configuration Management')
                     ),
                     ('middleware', 'Middleware'): (
-                        ('middleware_providers', 'Providers'),
-                        ('middleware_servers', "Middleware Servers"),
-                        ('middleware_deployments', "Middleware Deployments"),
-                        ('middleware_topology', "Topology"),
+                        ('middleware_providers', 'Providers', lambda: toolbar.select('List View')
+                            if not toolbar.is_active("List View") else None),
+                        ('middleware_servers', 'Middleware Servers',
+                         lambda: toolbar.select('List View')
+                            if not toolbar.is_active("List View") else None),
+                        ('middleware_deployments', 'Middleware Deployments',
+                         lambda: toolbar.select('List View')
+                            if not toolbar.is_active("List View") else None),
+                        ('middleware_datasources', 'Middleware Datasources',
+                         lambda: toolbar.select('List View')
+                            if not toolbar.is_active("List View") else None),
+                        ('middleware_topology', 'Topology'),
                     ),
                     ('containers', 'Containers'): (
                         ('containers_providers', 'Providers'),
