@@ -146,7 +146,12 @@ def get_mgmt(provider_key, providers=None, credentials=None):
         provider = providers[provider_key]
 
     if credentials is None:
-        credentials = conf.credentials[provider['credentials']]
+        # We need to handle the in-place credentials
+        credentials = provider['credentials']
+        # If it is not a mapping, it most likely points to a credentials yaml (as by default)
+        if not isinstance(credentials, Mapping):
+            credentials = conf.credentials[credentials]
+        # Otherwise it is a mapping and therefore we consider it credentials
 
     # Munge together provider dict and creds,
     # Let the provider do whatever they need with them
@@ -612,7 +617,7 @@ def clear_providers():
     wait_for_no_infra_providers()
     if version.current_version() > '5.5':
         wait_for_no_container_providers()
-    if version.current_version() >= '5.6':
+    if version.current_version() == version.LATEST:
         wait_for_no_middleware_providers()
     perflog.stop('utils.providers.clear_providers')
 
@@ -634,7 +639,7 @@ def destroy_vm(provider_mgmt, vm_name):
                 logger.error('Destroying VM %s failed for unknown reasons', vm_name)
             return vm_deleted
     except Exception as e:
-        logger.error('%s destroying VM %s (%s)', type(e).__name__, vm_name, e.message)
+        logger.error('%s destroying VM %s (%s)', type(e).__name__, vm_name, str(e))
 
 
 def get_credentials(credential_dict, cred_type=None):
@@ -797,17 +802,15 @@ def get_crud(provider_config_name):
             sec_protocol=prov_config['sec_protocol'],
             sec_realm=prov_config['sec_realm'])
     elif prov_type == 'rhevm':
+        credential_dict = {'default': credentials}
         if prov_config.get('candu_credentials', None):
-            candu_credentials = process_credential_yaml_key(
+            credential_dict['candu'] = process_credential_yaml_key(
                 prov_config['candu_credentials'], cred_type='candu')
-        else:
-            candu_credentials = None
         return RHEVMProvider(name=prov_config['name'],
             hostname=prov_config['hostname'],
             ip_address=prov_config['ipaddress'],
             api_port='',
-            credentials={'default': credentials,
-                         'candu': candu_credentials},
+            credentials=credential_dict,
             zone=prov_config['server_zone'],
             key=provider_config_name,
             start_ip=start_ip,

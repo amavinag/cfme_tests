@@ -7,6 +7,15 @@ from cfme.web_ui import accordion, toolbar
 from lya import AttrDict
 from selenium.common.exceptions import NoSuchElementException
 from utils import version
+from utils.log import logger
+
+
+def _not_implemented(menu_name, version_appeared):
+    def f():
+        curr_ver = str(version.current_version())
+        raise NotImplementedError(
+            '{} is available since {}, this is {}'.format(menu_name, version_appeared, curr_ver))
+    return f
 
 
 class Menu(UINavigate):
@@ -69,7 +78,14 @@ class Menu(UINavigate):
             self.add_branch('toplevel', self._branches)
             while self._branch_stack:
                 name, branches = self._branch_stack.pop(0)
-                self.add_branch(name, branches)
+                try:
+                    self.add_branch(name, branches)
+                except LookupError:
+                    logger.error(
+                        'Menu tried to graft onto [{}] which is not available'.format(name))
+                except Exception:
+                    logger.error('Something bad went wrong in menu initialization, see traceback')
+                    raise
             if version.current_version() < "5.6.0.1":
                 self.CURRENT_TOP_MENU = "//ul[@id='maintab']/li[not(contains(@class, 'drop'))]/a[2]"
             else:
@@ -178,7 +194,6 @@ class Menu(UINavigate):
                 ('containers', 'Containers'): (
                     ('containers_providers', 'Providers'),
                     ('containers_projects', 'Projects'),
-                    ('containers_nodes', 'Nodes'),
                     ('containers_nodes', 'Container Nodes'),
                     ('containers_pods', 'Pods'),
                     ('containers_routes', 'Routes'),
@@ -227,6 +242,13 @@ class Menu(UINavigate):
                     ('configuration', 'Configuration'),
                     ('smartproxies', 'SmartProxies'),
                     ('about', 'About')
+                ),
+                ('__bogus', lambda: logger.error('Trying to enter an unsupported feature!')): (
+                    ('middleware_providers', _not_implemented('Middleware providers', '5.6')),
+                    ('middleware_servers', _not_implemented('Middleware servers', '5.6')),
+                    ('middleware_deployments', _not_implemented('Middleware deployments', '5.6')),
+                    ('middleware_datasources', _not_implemented('Middleware datasources', '5.6')),
+                    ('middleware_topology', _not_implemented('Middleware topology', '5.6')),
                 )
             }
         else:
@@ -237,6 +259,12 @@ class Menu(UINavigate):
                     ('chargeback', 'Chargeback'),
                     ('timelines', 'Timelines'),
                     ('rss', 'RSS')
+                ),
+                ('services', 'Services'): (
+                    ('my_services', 'My Services'),
+                    ('services_catalogs', 'Catalogs'),
+                    ('services_workloads', 'Workloads'),
+                    ('services_requests', 'Requests')
                 ),
                 ('compute', 'Compute'): {
                     ('clouds', 'Clouds'): (
@@ -249,12 +277,6 @@ class Menu(UINavigate):
                             self._tree_func_with_grid(
                                 "Instances by Provider", "Instances by Provider")),
                         ('clouds_stacks', 'Stacks')
-                    ),
-                    ('services', 'Services'): (
-                        ('my_services', 'My Services'),
-                        ('services_catalogs', 'Catalogs'),
-                        ('services_workloads', 'Workloads'),
-                        ('services_requests', 'Requests')
                     ),
                     ('infrastructure', 'Infrastructure'): (
                         ('infrastructure_providers',
@@ -287,7 +309,7 @@ class Menu(UINavigate):
                     ('containers', 'Containers'): (
                         ('containers_providers', 'Providers'),
                         ('containers_projects', 'Projects'),
-                        ('containers_nodes', 'Nodes'),
+                        ('containers_nodes', 'Container Nodes'),
                         ('containers_pods', 'Pods'),
                         ('containers_routes', 'Routes'),
                         ('containers_replicators', 'Replicators'),
@@ -300,9 +322,6 @@ class Menu(UINavigate):
                 },
                 ('n_configuration', 'Configuration'): (
                     ('infrastructure_config_management', 'Configuration Management'),
-                ),
-                ('containers', 'Containers'): (
-                    ('containers_providers', 'Providers'),
                 ),
                 ('control', 'Control'): (
                     ('control_explorer', 'Explorer'),

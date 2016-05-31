@@ -21,20 +21,13 @@ from utils.wait import wait_for, TimedOutError
 from utils import version, conf
 from utils.pretty import Pretty
 from utils.signals import fire, on_signal
+from utils import clear_property_cache
 
 
 @on_signal("server_details_changed")
 def invalidate_server_details():
-    # TODO: simplify after idempotent cached property is availiable
-    # https://github.com/pydanny/cached-property/issues/31
-    try:
-        del store.current_appliance.configuration_details
-    except AttributeError:
-        pass
-    try:
-        del store.current_appliance.zone_description
-    except AttributeError:
-        pass
+    clear_property_cache(store.current_appliance,
+                        'configuration_details', 'zone_description')
 
 
 access_tree = partial(accordion.tree, "Access Control")
@@ -131,7 +124,8 @@ tag_form = Form(
         ('new', {
             version.LOWEST: "//span[@class='glyphicon glyphicon-plus']",
             '5.6': '//button[normalize-space(.)="Add"]'
-        })
+        }),
+        ('save', '//button[normalize-space(.)="Save"]'),
     ])
 
 zone_form = Form(
@@ -1763,7 +1757,11 @@ class Category(Pretty):
         if not cancel:
             sel.force_navigate("cfg_settings_region_my_company_categories")
             row = category_table.find_row_by_cells({'name': self.name})
-            sel.click(row[0], wait_ajax=False)
+            del_btn_fn = version.pick({
+                version.LOWEST: lambda: row[0],
+                '5.6': lambda: row.actions
+            })
+            sel.click(del_btn_fn(), wait_ajax=False)
             sel.handle_alert()
             flash.assert_success_message('Category "{}": Delete successful'.format(self.name))
 
@@ -1789,7 +1787,11 @@ class Tag(Pretty):
     def update(self, updates):
         sel.force_navigate("cfg_settings_region_my_company_tag_edit",
                            context={"tag": self})
-        fill(tag_form, self._form_mapping(**updates), action=tag_form.add)
+        update_action = version.pick({
+            version.LOWEST: tag_form.add,
+            '5.6': tag_form.save
+        })
+        fill(tag_form, self._form_mapping(**updates), action=update_action)
 
     def delete(self, cancel=True):
         """
@@ -1798,7 +1800,11 @@ class Tag(Pretty):
             sel.force_navigate("cfg_settings_region_my_company_tags")
             fill(tag_form, {'category': self.category.display_name})
             row = classification_table.find_row_by_cells({'name': self.name})
-            sel.click(row[0], wait_ajax=False)
+            del_btn_fn = version.pick({
+                version.LOWEST: lambda: row[0],
+                '5.6': lambda: row.actions
+            })
+            sel.click(del_btn_fn(), wait_ajax=False)
             sel.handle_alert()
 
 
