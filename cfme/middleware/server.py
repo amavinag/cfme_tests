@@ -1,6 +1,7 @@
 import re
 from cfme.common import Taggable
 from mgmtsystem.hawkular import Path
+from cfme.exceptions import MiddlewareServerNotFound
 from cfme.fixtures import pytest_selenium as sel
 from cfme.web_ui import CheckboxTable, paginator
 from cfme.web_ui.menu import nav, toolbar as tb
@@ -9,7 +10,7 @@ from utils import attributize_string
 from utils.db import cfmedb
 from utils.providers import get_crud, get_provider_key, list_middleware_providers
 from utils.varmeth import variable
-from . import LIST_TABLE_LOCATOR, mon_btn, pwr_btn, MiddlewareBase
+from . import LIST_TABLE_LOCATOR, mon_btn, pwr_btn, MiddlewareBase, download
 
 list_tbl = CheckboxTable(table_locator=LIST_TABLE_LOCATOR)
 
@@ -191,6 +192,30 @@ class MiddlewareServer(MiddlewareBase, Taggable):
     def server_in_rest(self):
         raise NotImplementedError('This feature not implemented yet')
 
+    @variable(alias='ui')
+    def is_running(self):
+        raise NotImplementedError('This feature not implemented yet until issue #9147 is resolved')
+
+    @is_running.variant('db')
+    def is_running_in_db(self):
+        server = _db_select_query(name=self.name, provider=self.provider,
+                                 feed=self.feed).first()
+        if not server:
+            raise MiddlewareServerNotFound("Server '{}' not found in DB!".format(self.name))
+        return parse_properties(server.properties)['Server State'] == 'running'
+
+    @is_running.variant('mgmt')
+    def is_running_in_mgmt(self):
+        db_srv = _db_select_query(name=self.name, provider=self.provider,
+                                 feed=self.feed).first()
+        if db_srv:
+            path = Path(db_srv.ems_ref)
+            mgmt_srv = self.provider.mgmt.resource_data(feed_id=path.feed,
+                        resource_id=path.resource)
+            if mgmt_srv:
+                return mgmt_srv.value['Server State'] == 'running'
+        raise MiddlewareServerNotFound("Server '{}' not found in MGMT!".format(self.name))
+
     def reload_server(self):
         self.load_details(refresh=True)
         pwr_btn("Reload Server", invokes_alert=True)
@@ -204,3 +229,8 @@ class MiddlewareServer(MiddlewareBase, Taggable):
     def open_utilization(self):
         self.load_details(refresh=True)
         mon_btn("Utilization")
+
+    @classmethod
+    def download(cls, extension, provider=None):
+        _get_servers_page(provider)
+        download(extension)
