@@ -27,6 +27,7 @@ from fixtures import ui_coverage
 from fixtures.pytest_store import _push_appliance, _pop_appliance, store
 from utils import api, conf, datafile, db, trackerbot, db_queries, ssh, ports
 from utils.datafile import load_data_file
+from utils.events import EventTool
 from utils.log import logger, create_sublogger, logger_wrap
 from utils.net import net_check, resolve_hostname
 from utils.path import data_path, patches_path, scripts_path
@@ -431,6 +432,11 @@ class IPAppliance(object):
         except (TypeError, ValueError):
             value = None
         return value
+
+    @cached_property
+    def events(self):
+        """Returns an instance of the event capturing class pointed to this appliance."""
+        return EventTool(self)
 
     def diagnose_evm_failure(self):
         """Go through various EVM processes, trying to figure out what fails
@@ -1362,7 +1368,10 @@ class IPAppliance(object):
         # ip address (and issuing a warning) if that fails. methods that set up the internal
         # db should set db_address to something else when they do that
         try:
-            db = self.get_yaml_file('/var/www/miq/vmdb/config/vmdb.yml.db')['server']['host']
+            if self.version >= '5.6':
+                db = self.get_yaml_config("vmdb")['server']['host']
+            else:
+                db = self.get_yaml_file('/var/www/miq/vmdb/config/vmdb.yml.db')['server']['host']
             db = db.strip()
             ip_addr = self.ssh_client.run_command('ip address show')
             if db in ip_addr.output or db.startswith('127') or 'localhost' in db:
