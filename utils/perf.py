@@ -453,18 +453,20 @@ def get_benchmark_cfg_mgt_providers():
 def get_worker_pid(worker_type):
     """Obtains the pid of the first worker with the worker_type specified"""
     ssh_client = SSHClient()
-    if version.current_version().is_in_series('5.5'):
-        exit_status, out = ssh_client.run_command('cd /var/www/miq/vmdb; rake evm:status 2> /dev/null | '
+    if version.current_version() >= '5.5':
+        excode, out = ssh_client.run_command(
+            'cd /var/www/miq/vmdb; rake evm:status 2> /dev/null | '
             'grep -m 1  \'{}\' | awk \'{{print $7}}\''.format(worker_type))
     else:
-        exit_status, out = ssh_client.run_command('service evmserverd status 2> /dev/null | '
+        excode, out = ssh_client.run_command(
+            'service evmserverd status 2> /dev/null | '
             'grep -m 1  \'{}\' | awk \'{{print $7}}\''.format(worker_type))
     worker_pid = str(out).strip()
     if out:
         logger.info('Obtained {} PID: {}'.format(worker_type, worker_pid))
     else:
         logger.error('Could not obtain {} PID, check evmserverd running or if specific role is'
-            ' enabled...'.format(worker_type))
+                     ' enabled...'.format(worker_type))
         assert out
     return worker_pid
 
