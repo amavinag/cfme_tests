@@ -10,9 +10,13 @@ from cfme.web_ui import Region, SplitTable
 
 # Page specific locators
 list_page = Region(
+    # locators={
+    #     'flavor_table': SplitTable(header_data=('//div[@class="xhdr"]/table/tbody', 1),
+    #         body_data=('//div[@class="objbox"]/table/tbody', 1))
+    # },
     locators={
-        'flavor_table': SplitTable(header_data=('//div[@class="xhdr"]/table/tbody', 1),
-            body_data=('//div[@class="objbox"]/table/tbody', 1))
+        'flavor_table': SplitTable(header_data=('//table/thead', 1),
+                                   body_data=('//table/tbody', 1))
     },
     title='Flavors')
 

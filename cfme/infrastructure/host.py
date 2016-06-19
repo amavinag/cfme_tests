@@ -327,7 +327,7 @@ class Host(Updateable, Pretty):
         datastores = set([])
         for page in paginator.pages():
             for title in sel.elements(
-                    "//div[@id='quadicon']/../../../tr/td/a[contains(@href,'storage/show')]"):
+                    "//div[@id='quadicon']/../../../tr/td/a[contains(@href,'storage')]"):
                 datastores.add(sel.get_attribute(title, "title"))
         return datastores
 
@@ -500,7 +500,7 @@ def get_all_hosts(do_not_navigate=False):
     hosts = set([])
     for page in paginator.pages():
         for title in sel.elements(
-                "//div[@id='quadicon']/../../../tr/td/a[contains(@href,'host/show')]"):
+                "//div[@id='quadicon']/../../../tr/td/a[contains(@href,'host')]"):
             hosts.add(sel.get_attribute(title, "title"))
     return hosts
 

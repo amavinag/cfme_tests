@@ -11,6 +11,7 @@ from functools import partial
 from operator import methodcaller
 
 from mgmtsystem.virtualcenter import VMWareSystem
+from mgmtsystem.azure import AzureSystem
 from mgmtsystem.scvmm import SCVMMSystem
 from mgmtsystem.ec2 import EC2System
 from mgmtsystem.google import GoogleCloudSystem
@@ -45,6 +46,7 @@ infra_provider_type_map = {
 
 #: mapping of cloud provider type names to ``mgmtsystem`` classes
 cloud_provider_type_map = {
+    'azure': AzureSystem,
     'ec2': EC2System,
     'openstack': OpenstackSystem,
     'gce': GoogleCloudSystem,
@@ -558,7 +560,10 @@ def clear_middleware_providers(validate=True):
     total = paginator.rec_total()
     if total > 0:
         logger.info(' Providers exist, so removing all middleware providers')
-        paginator.results_per_page('100')
+        # TODO: Fix.
+        # TEXT: "Items per page" hidden and failed to click paginator items drop down selection
+        # For the moment allow it go with default value 20
+        # paginator.results_per_page('100')
         sel.click(paginator.check_all())
         toolbar.select('Configuration', 'Remove Middleware Providers from the VMDB',
                        invokes_alert=True)
@@ -765,18 +770,24 @@ def get_crud(provider_config_name):
             region=prov_config['region'],
             credentials={'default': ser_acc_creds},
             key=provider_config_name)
+    elif prov_type == 'azure':
+        from cfme.cloud.provider import AzureProvider
+        return AzureProvider(name=prov_config['name'],
+            region=prov_config['region'],
+            tenant_id=prov_config['tenant_id'],
+            credentials={'default': credentials},
+            key=provider_config_name)
     elif prov_type == 'openstack':
         from cfme.cloud.provider import OpenStackProvider
+        credentials_dict = {'default': credentials}
         if 'amqp_credentials' in prov_config:
-            amqp_credentials = process_credential_yaml_key(
+            credentials_dict['amqp'] = process_credential_yaml_key(
                 prov_config['amqp_credentials'], cred_type='amqp')
         return OpenStackProvider(name=prov_config['name'],
             hostname=prov_config['hostname'],
             ip_address=prov_config['ipaddress'],
             api_port=prov_config['port'],
-            credentials={
-                'default': credentials,
-                'amqp': amqp_credentials},
+            credentials=credentials_dict,
             zone=prov_config['server_zone'],
             key=provider_config_name,
             sec_protocol=prov_config.get('sec_protocol', "Non-SSL"),

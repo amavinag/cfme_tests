@@ -76,37 +76,37 @@ infra_pxe_filters = [
     re.compile(r'^POST \"\/pxe\/tree_select\/\?id\=pit\-[0-9]*\"$')]
 
 
+# @pytest.mark.tier(3)
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("cfme_log_level_rails_debug")
-def test_perf_ui_infra_providers(ui_worker_pid):
+@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+def test_perf_ui_infra_providers(ui_worker_pid, soft_assert):
     from_ts = int(time.time() * 1000)
-    pages, prod_tail = standup_perf_ui(ui_worker_pid)
+    pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
 
     nav_limit = 0
     if 'providers' in perf_tests['ui']['page_check']['infrastructure']:
         nav_limit = perf_tests['ui']['page_check']['infrastructure']['providers']
 
     pages.extend(navigate_quadicons(get_all_providers(), 'infra_prov', 'infrastructure_providers',
-        nav_limit, ui_worker_pid, prod_tail))
+        nav_limit, ui_worker_pid, prod_tail, soft_assert))
 
     pages_to_csv(pages, 'perf_ui_infra_providers.csv')
     pages_to_statistics_csv(pages, infra_provider_filters, 'ui-statistics.csv')
-    analyze_page_stat(pages)
-    log_grafana_url(from_ts)
+    # analyze_page_stat(pages)
 
-
+# @pytest.mark.tier(3)
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("cfme_log_level_rails_debug")
-def test_perf_ui_infra_clusters(ui_worker_pid):
+@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+def test_perf_ui_infra_clusters(ui_worker_pid, soft_assert):
     from_ts = int(time.time() * 1000)
-    pages, prod_tail = standup_perf_ui(ui_worker_pid)
+    pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
 
     nav_limit = 0
     if 'clusters' in perf_tests['ui']['page_check']['infrastructure']:
         nav_limit = perf_tests['ui']['page_check']['infrastructure']['clusters']
 
-    pages.extend(perf_click(ui_worker_pid, prod_tail, True, sel.force_navigate,
-        'infrastructure_clusters'))
+    pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, True, sel.force_navigate,
+        'infrastructure_clusters'), soft_assert))
 
     clusters = set([])
     for page in paginator.pages():
@@ -117,19 +117,19 @@ def test_perf_ui_infra_clusters(ui_worker_pid):
     acc_bars = ['Properties', 'Relationships']
 
     pages.extend(navigate_quadicons(clusters, 'cluster', 'infrastructure_clusters', nav_limit,
-        ui_worker_pid, prod_tail, acc_bars))
+        ui_worker_pid, prod_tail, soft_assert, acc_bars))
 
     pages_to_csv(pages, 'perf_ui_infra_clusters.csv')
     pages_to_statistics_csv(pages, cluster_filters, 'ui-statistics.csv')
-    analyze_page_stat(pages)
-    log_grafana_url(from_ts)
+    # analyze_page_stat(pages)
 
 
+# @pytest.mark.tier(3)
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("cfme_log_level_rails_debug")
-def test_perf_ui_infra_hosts(ui_worker_pid):
+@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+def test_perf_ui_infra_hosts(ui_worker_pid, soft_assert):
     from_ts = int(time.time() * 1000)
-    pages, prod_tail = standup_perf_ui(ui_worker_pid)
+    pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
 
     nav_limit = 0
     if 'hosts' in perf_tests['ui']['page_check']['infrastructure']:
@@ -138,50 +138,55 @@ def test_perf_ui_infra_hosts(ui_worker_pid):
     acc_bars = ['Properties', 'Relationships', 'Security', 'Configuration']
 
     pages.extend(navigate_quadicons(get_all_hosts(), 'host', 'infrastructure_hosts', nav_limit,
-        ui_worker_pid, prod_tail, acc_bars))
+        ui_worker_pid, prod_tail, soft_assert, acc_bars))
 
     pages_to_csv(pages, 'perf_ui_infra_hosts.csv')
     pages_to_statistics_csv(pages, host_filters, 'ui-statistics.csv')
-    analyze_page_stat(pages)
-    log_grafana_url(from_ts)
+    # analyze_page_stat(pages)
 
-
+# Currently unskip on 1175504 since a large environment is a requirement for this bug
+# @pytest.mark.tier(3)
+# @pytest.mark.meta(
+#     blockers=[
+#         1086386,
+#         BZ(1175504, unblock=True)
+#     ]
+# )
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("cfme_log_level_rails_debug")
-def test_perf_ui_infra_vm_explorer(ui_worker_pid):
+@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+def test_perf_ui_infra_vm_explorer(ui_worker_pid, soft_assert):
     from_ts = int(time.time() * 1000)
-    pages, prod_tail = standup_perf_ui(ui_worker_pid)
-    from utils.log import logger
+    pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
 
-    pages.extend(perf_click(ui_worker_pid, prod_tail, True, sel.force_navigate,
-        'infrastructure_virtual_machines'))
+    pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, True, sel.force_navigate,
+        'infrastructure_virtual_machines'), soft_assert))
 
-    # infra_acc = OrderedDict((('VMs & Templates', 'vms_and_templates'), ('VMs', 'vms'),
-    #     ('Templates', 'templates')))
-    infra_acc = OrderedDict()
-    infra_acc['VMs & Templates'] = 'vms_and_templates'
+    infra_acc = OrderedDict((('VMs & Templates', 'vms_and_templates'), ('VMs', 'vms'),
+        ('Templates', 'templates')))
 
     pages.extend(navigate_accordions(infra_acc, 'infrastructure_virtual_machines',
-        perf_tests['ui']['page_check']['infrastructure']['vm_explorer'], ui_worker_pid, prod_tail))
+        perf_tests['ui']['page_check']['infrastructure']['vm_explorer'], ui_worker_pid, prod_tail,
+        soft_assert))
 
     pages_to_csv(pages, 'perf_ui_infra_vm_explorer.csv')
     pages_to_statistics_csv(pages, vm_infra_filters, 'ui-statistics.csv')
-    analyze_page_stat(pages)
-    log_grafana_url(from_ts)
 
 
+# Currently unskip 1129260 since a large environment is a requirement for this bug
+# @pytest.mark.tier(3)
+@pytest.mark.meta(blockers=[BZ(1129260, unblock=True)])
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("cfme_log_level_rails_debug")
-def test_perf_ui_infra_resource_pools(ui_worker_pid):
+@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+def test_perf_ui_infra_resource_pools(ui_worker_pid, soft_assert):
     from_ts = int(time.time() * 1000)
-    pages, prod_tail = standup_perf_ui(ui_worker_pid)
+    pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
 
     nav_limit = 0
     if 'resource_pools' in perf_tests['ui']['page_check']['infrastructure']:
         nav_limit = perf_tests['ui']['page_check']['infrastructure']['resource_pools']
 
-    pages.extend(perf_click(ui_worker_pid, prod_tail, True, sel.force_navigate,
-        'infrastructure_resource_pools'))
+    pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, True, sel.force_navigate,
+        'infrastructure_resource_pools'), soft_assert))
 
     resource_pools = set([])
     for page in paginator.pages():
@@ -192,19 +197,19 @@ def test_perf_ui_infra_resource_pools(ui_worker_pid):
     acc_bars = ['Properties', 'Relationships']
 
     pages.extend(navigate_quadicons(resource_pools, 'resource_pool',
-        'infrastructure_resource_pools', nav_limit, ui_worker_pid, prod_tail, acc_bars))
+        'infrastructure_resource_pools', nav_limit, ui_worker_pid, prod_tail, soft_assert,
+        acc_bars))
 
     pages_to_csv(pages, 'perf_ui_infra_resource_pools.csv')
     pages_to_statistics_csv(pages, resource_pool_filters, 'ui-statistics.csv')
-    analyze_page_stat(pages)
-    log_grafana_url(from_ts)
 
 
+# @pytest.mark.tier(3)
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("cfme_log_level_rails_debug")
-def test_perf_ui_infra_datastores(ui_worker_pid):
+@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+def test_perf_ui_infra_datastores(ui_worker_pid, soft_assert):
     from_ts = int(time.time() * 1000)
-    pages, prod_tail = standup_perf_ui(ui_worker_pid)
+    pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
 
     nav_limit = 0
     if 'datastores' in perf_tests['ui']['page_check']['infrastructure']:
@@ -213,31 +218,28 @@ def test_perf_ui_infra_datastores(ui_worker_pid):
     acc_bars = ['Properties', 'Relationships', 'Content']
 
     pages.extend(navigate_quadicons(get_all_datastores(), 'datastore', 'infrastructure_datastores',
-        nav_limit, ui_worker_pid, prod_tail, acc_bars))
+        nav_limit, ui_worker_pid, prod_tail, soft_assert, acc_bars))
 
     pages_to_csv(pages, 'perf_ui_infra_datastores.csv')
     pages_to_statistics_csv(pages, storage_filters, 'ui-statistics.csv')
-    analyze_page_stat(pages)
-    log_grafana_url(from_ts)
 
 
+# @pytest.mark.tier(3)
 @pytest.mark.perf_ui_infrastructure
-@pytest.mark.usefixtures("cfme_log_level_rails_debug")
-def test_perf_ui_infra_pxe(ui_worker_pid):
+@pytest.mark.usefixtures("setup_infrastructure_providers", "cfme_log_level_rails_debug")
+def test_perf_ui_infra_pxe(ui_worker_pid, soft_assert):
     from_ts = int(time.time() * 1000)
-    pages, prod_tail = standup_perf_ui(ui_worker_pid)
+    pages, prod_tail = standup_perf_ui(ui_worker_pid, soft_assert)
 
-    pages.extend(perf_click(ui_worker_pid, prod_tail, True, sel.force_navigate,
-        'infrastructure_pxe'))
+    pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, True, sel.force_navigate,
+        'infrastructure_pxe'), soft_assert))
 
     pxe_acc = OrderedDict((('PXE Servers', 'pxe_servers'),
         ('Customization Templates', 'customization_templates'),
         ('System Image Types', 'system_image_types'), ('ISO Datastores', 'iso_datastores')))
 
     pages.extend(navigate_accordions(pxe_acc, 'infrastructure_pxe', (perf_tests['ui']['page_check']
-        ['infrastructure']['pxe']), ui_worker_pid, prod_tail))
+        ['infrastructure']['pxe']), ui_worker_pid, prod_tail, soft_assert))
 
     pages_to_csv(pages, 'perf_ui_infra_pxe.csv')
     pages_to_statistics_csv(pages, infra_pxe_filters, 'ui-statistics.csv')
-    analyze_page_stat(pages)
-    log_grafana_url(from_ts)

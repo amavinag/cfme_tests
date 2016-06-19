@@ -125,7 +125,9 @@ def get_active_links(name):
         name: Name of the section
     """
     link_root = _content_element(name)
-    link_loc = './/div[@class="panecontent"]//a[@title and not(child::img)]|'\
+    # link_loc = './/div[@class="panecontent"]//a[@title and not(child::img)]|' \
+    #            './li[not(contains(@class, "disabled"))]/a'
+    link_loc = './/div[contains(@class, "panel-collapse")]//a[@title and not(child::img)]|' \
                './li[not(contains(@class, "disabled"))]/a'
     active_els = sel.elements(link_loc, root=link_root)
     return [ListAccordionLink(el.get_attribute("title"), link_root) for el in active_els]
@@ -159,9 +161,12 @@ class ListAccordionLink(Pretty):
         else:
             matcher = matcher.format("normalize-space(.)")
 
-        locator = './/div[@class="panecontent"]//a[{} and not(child::img)]|'\
+        locator = './/div[contains(@class, "panel-collapse")]//a[{} and not(child::img)]|'\
             './li[not(contains(@class, "disabled"))]/a[{}]'\
             .format(matcher, matcher)
+        # locator = './/div[contains(@class, "panel-collapse")]//a[{} and not(child::img)]|' \
+        #           './li[not(contains(@class, "disabled"))]/a[{}]' \
+        #     .format(matcher, matcher)
         return locator
 
     def _check_exists(self):

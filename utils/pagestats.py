@@ -22,24 +22,26 @@ import numpy
 import re
 
 
-def analyze_page_stat(pages):
+def analyze_page_stat(pages, soft_assert):
     for page in pages:
         logger.info(page)
         if page.completedintime > perf_tests['ui']['threshold']['page_render']:
+            soft_assert(False, 'Render Time Threshold ({} ms) exceeded: {}'.format(
+                perf_tests['ui']['threshold']['page_render'], page))
             logger.warning('Slow Render, Slow Query(>%sms) Count: %s',
                 perf_tests['ui']['threshold']['query_time'], len(page.slowselects))
             for slow in page.slowselects:
                 logger.warning('Slow Query Log Line: %s', slow)
         if page.seleniumtime > perf_tests['ui']['threshold']['selenium']:
-            # soft_assert(False, 'Selenium Transaction Time Threshold ({} ms) exceeded: {}'.format(
-            #     perf_tests['ui']['threshold']['selenium'], page))
+            soft_assert(False, 'Selenium Transaction Time Threshold ({} ms) exceeded: {}'.format(
+                perf_tests['ui']['threshold']['selenium'], page))
             logger.warning('Slow Selenium Time')
-        # if page.selectcount > perf_tests['ui']['threshold']['query_count']:
-            # soft_assert(False, 'Query Count Threshold ({}) exceeded:    {}'.format(
-            #     perf_tests['ui']['threshold']['query_count'], page))
-        # if page.uncachedcount > perf_tests['ui']['threshold']['uncached_count']:
-        #     soft_assert(False, 'Uncached Query Count Threshold ({}) exceeded: {}'.format(
-        #         perf_tests['ui']['threshold']['uncached_count'], page))
+        if page.selectcount > perf_tests['ui']['threshold']['query_count']:
+            soft_assert(False, 'Query Count Threshold ({}) exceeded:    {}'.format(
+                perf_tests['ui']['threshold']['query_count'], page))
+        if page.uncachedcount > perf_tests['ui']['threshold']['uncached_count']:
+            soft_assert(False, 'Uncached Query Count Threshold ({}) exceeded: {}'.format(
+                perf_tests['ui']['threshold']['uncached_count'], page))
     return pages
 
 
@@ -47,54 +49,33 @@ def any_in(items, thing):
     return any(item in thing for item in items)
 
 
-# def generate_tree_paths(tree_contents, path, paths):
-#     if type(tree_contents) is list:
-#         for item in tree_contents:
-#             generate_tree_paths(item, path, paths)
-#     elif type(tree_contents) is tuple:
-#         path.append(tree_contents[0])
-#         generate_tree_paths(tree_contents[1], path, paths)
-#         path.pop()
-#     else:
-#         path.append(tree_contents)
-#         paths.append(list(path))
-#         path.pop()
-
-
 def generate_tree_paths(tree_contents, path, paths):
-    # logger.debug('-------------------------------------')
-    # logger.debug('tree_contents: {}'.format(tree_contents))
-    # logger.debug('path: {}'.format(path))
-    # logger.debug('paths: {}'.format(paths))
-    lst_count = 0
-    for item in tree_contents:
-        # logger.debug('Item: {}, lst_count: {}'.format(item, lst_count))
-        if type(item) is list:
-            # logger.debug('list')
+    if type(tree_contents) is list:
+        for item in tree_contents:
             generate_tree_paths(item, path, paths)
-        else:
-            # logger.debug('string')
-            if lst_count >= 1 and len(path) >= 1:
-                path.pop()
-            path.append(item)
-            lst_count += 1
-            # logger.debug('Appending Path: {}'.format(path))
-            paths.append(list(path))
-    if len(path) >= 1:
+    elif type(tree_contents) is tuple:
+        path.append(tree_contents[0])
+        generate_tree_paths(tree_contents[1], path, paths)
+        path.pop()
+    else:
+        path.append(tree_contents)
+        paths.append(list(path))
         path.pop()
 
 
-def navigate_accordions(accordions, page_name, ui_bench_pg_limit, ui_worker_pid, prod_tail):
+def navigate_accordions(accordions, page_name, ui_bench_pg_limit, ui_worker_pid, prod_tail,
+        soft_assert):
     pages = []
     for acc_tree in accordions:
-        pages.extend(perf_click(ui_worker_pid, prod_tail, True, accordion.click,
-            acc_tree))
+        pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, True, accordion.click,
+            acc_tree), soft_assert))
 
         logger.info('Starting to read tree: %s', acc_tree)
         tree_contents, sel_time = perf_bench_read_tree(accordion.tree(acc_tree))
         logger.info('%s tree read in %sms', acc_tree, sel_time)
 
-        pages.extend(perf_click(ui_worker_pid, prod_tail, False, None))
+        pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, False, None),
+            soft_assert))
 
         nav_limit = 0
         count = -1
@@ -104,43 +85,31 @@ def navigate_accordions(accordions, page_name, ui_bench_pg_limit, ui_worker_pid,
 
         paths = []
         generate_tree_paths(tree_contents, [], paths)
-        logger.debug('Number of Paths: {} :: {}'.format(len(paths), paths))
-        idx = 0
+        logger.info('Found %s tree paths', len(paths))
         for path in paths:
-            idx += 1
-            logger.debug('{}:Navigating to: {}'.format(str(idx).rjust(5), path))
-
-        for path in paths:
-            logger.debug('Navigating to: {}, {}'.format(acc_tree, path))
-            count += 1
+            logger.info('Navigating to: %s, %s', acc_tree, path[-1])
             try:
-                pages.extend(perf_click(ui_worker_pid, prod_tail, True,
-                    accordion.tree(acc_tree).click_path, *path))
+                pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, True,
+                    accordion.tree(acc_tree).click_path, *path), soft_assert))
+                count += 1
                 # Navigate out of the page every 4th click
                 if (count % 4) == 0:
-                    pages.extend(perf_click(ui_worker_pid, prod_tail, False,
-                        sel.force_navigate, 'dashboard'))
-                    pages.extend(perf_click(ui_worker_pid, prod_tail, False, sel.force_navigate,
-                        page_name))
+                    pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, False,
+                        sel.force_navigate, 'dashboard'), soft_assert))
+                    pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, False,
+                        sel.force_navigate, page_name), soft_assert))
             except CandidateNotFound:
-                logger.info('Could not navigate to: {}'.format(path[-1]))
-                logger.error('Entire Path: {}'.format(path))
-                pages.extend(perf_click(ui_worker_pid, prod_tail, False,
-                    sel.force_navigate, 'dashboard'))
-                pages.extend(perf_click(ui_worker_pid, prod_tail, False, sel.force_navigate,
-                    page_name))
+                logger.info('Could not navigate to: %s', path[-1])
             except UnexpectedAlertPresentException:
                 logger.warning('UnexpectedAlertPresentException - page_name: %s, accordion: %s,'
                     ' path: %s', page_name, acc_tree, path[-1])
                 browser().switch_to_alert().dismiss()
-            if (count % 5) == 0:
-                logger.info('Navigated: {}/{}'.format(count, nav_limit))
             if not nav_limit == 0 and count >= nav_limit:
                 break
     return pages
 
 
-def navigate_quadicons(q_names, q_type, page_name, nav_limit, ui_worker_pid, prod_tail,
+def navigate_quadicons(q_names, q_type, page_name, nav_limit, ui_worker_pid, prod_tail, soft_assert,
         acc_topbars=[]):
     pages = []
     count = 0
@@ -153,7 +122,8 @@ def navigate_quadicons(q_names, q_type, page_name, nav_limit, ui_worker_pid, pro
                 quadicon = Quadicon(str(q), q_type)
                 if sel.is_displayed(quadicon):
 
-                    pages.extend(perf_click(ui_worker_pid, prod_tail, True, sel.click, quadicon))
+                    pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, True,
+                        sel.click, quadicon), soft_assert))
 
                     for topbar in acc_topbars:
                         try:
@@ -161,6 +131,8 @@ def navigate_quadicons(q_names, q_type, page_name, nav_limit, ui_worker_pid, pro
                                 list_acc.click(topbar)
                             links = list_acc.get_active_links(topbar)
                             for link in range(len(links)):
+                                if not list_acc.is_active(topbar):
+                                    list_acc.click(topbar)
                                 # Every click makes the previous list of links invalid
                                 links = list_acc.get_active_links(topbar)
                                 if link <= len(links):
@@ -171,19 +143,20 @@ def navigate_quadicons(q_names, q_type, page_name, nav_limit, ui_worker_pid, pro
                                     if any_in(dnn, links[link].title):
                                         logger.debug('DNN Skipping: %s', links[link].title)
                                     else:
-                                        pages.extend(perf_click(ui_worker_pid,
-                                            prod_tail, True, links[link].click))
+                                        pages.extend(analyze_page_stat(perf_click(ui_worker_pid,
+                                            prod_tail, True, links[link].click), soft_assert))
 
                         except NoSuchElementException:
                             logger.warning('NoSuchElementException - page_name:%s, Quadicon:%s,'
                                 ' topbar:%s', page_name, q, topbar)
-                            # soft_assert(False, 'NoSuchElementException - page_name:{}, '
-                            #     'Quadicon:{}, topbar:{}'.format(page_name, q, topbar))
+                            soft_assert(False, 'NoSuchElementException - page_name:{}, Quadicon:{},'
+                                ' topbar:{}'.format(page_name, q, topbar))
                             break
                     count += 1
                     break
 
-            pages.extend(perf_click(ui_worker_pid, prod_tail, True, sel.force_navigate, page_name))
+            pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, True,
+                sel.force_navigate, page_name), soft_assert))
             # If nav_limit == 0 , every item is navigated to
             if not nav_limit == 0 and count == nav_limit:
                 break
@@ -191,14 +164,14 @@ def navigate_quadicons(q_names, q_type, page_name, nav_limit, ui_worker_pid, pro
     return pages
 
 
-def navigate_split_table(table, page_name, nav_limit, ui_worker_pid, prod_tail):
+def navigate_split_table(table, page_name, nav_limit, ui_worker_pid, prod_tail, soft_assert):
     pages = []
     count = 0
     if nav_limit == 0:
         count = -1
 
-    pages.extend(perf_click(ui_worker_pid, prod_tail, False, sel.force_navigate,
-        page_name))
+    pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, False, sel.force_navigate,
+        page_name), soft_assert))
     # Obtain all items from Split Table
     item_names = []
     for page in paginator.pages():
@@ -207,21 +180,21 @@ def navigate_split_table(table, page_name, nav_limit, ui_worker_pid, prod_tail):
             item_names.append(row.columns[2].text)
     logger.info('Discovered %d Split Table items.', len(item_names))
 
-    pages.extend(perf_click(ui_worker_pid, prod_tail, True, sel.force_navigate,
-        page_name))
+    pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, True, sel.force_navigate,
+        page_name), soft_assert))
 
     for item_name in item_names:
-        logger.info('Navigating to Split Table Item: %s'. item_name)
+        logger.info('Navigating to Split Table Item: %s', item_name)
         page_found = False
         for page in paginator.pages():
             cell_found = table.find_cell('name', item_name)
             if cell_found:
                 page_found = True
                 count += 1
-                pages.extend(perf_click(ui_worker_pid, prod_tail, True, table.click_cell, 'name',
-                    item_name))
-                pages.extend(perf_click(ui_worker_pid, prod_tail, True, sel.force_navigate,
-                    page_name))
+                pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, True,
+                    table.click_cell, 'name', item_name), soft_assert))
+                pages.extend(analyze_page_stat(perf_click(ui_worker_pid, prod_tail, True,
+                    sel.force_navigate, page_name), soft_assert))
                 break
         if not page_found:
             logger.error('Split Table Page was never found: page_name: %s, item: %s',
@@ -233,13 +206,13 @@ def navigate_split_table(table, page_name, nav_limit, ui_worker_pid, prod_tail):
     return pages
 
 
-def standup_perf_ui(ui_worker_pid):
+def standup_perf_ui(ui_worker_pid, soft_assert):
     logger.info('Opening /var/www/miq/vmdb/log/production.log for tail')
     prod_tail = SSHTail('/var/www/miq/vmdb/log/production.log')
     prod_tail.set_initial_file_end()
 
     ensure_browser_open()
-    pages = perf_click(ui_worker_pid, prod_tail, False, login_admin)
+    pages = analyze_page_stat(perf_click(ui_worker_pid, prod_tail, False, login_admin), soft_assert)
 
     return pages, prod_tail
 

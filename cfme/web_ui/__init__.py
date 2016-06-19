@@ -825,7 +825,7 @@ class SplitTable(Table):
         # thead/tr containing header data
         # xpath is 1-indexed, so we need to add 1 to the offset to get the correct row
         return sel.element(
-            'tr[{}]'.format(self.header_offset + 1), root=sel.element(self._header_loc))
+            'tr'.format(self.header_offset + 1), root=sel.element(self._header_loc))
 
     @property
     def body(self):

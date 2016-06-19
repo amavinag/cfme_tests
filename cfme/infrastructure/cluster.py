@@ -119,6 +119,6 @@ def get_all_clusters(do_not_navigate=False):
     clusters = set([])
     for page in paginator.pages():
         for title in sel.elements(
-                "//div[@id='quadicon']/../../../tr/td/a[contains(@href,'cluster/show')]"):
+                "//div[@id='quadicon']/../../../tr/td/a[contains(@href,'cluster')]"):
             clusters.add(sel.get_attribute(title, "title"))
     return clusters

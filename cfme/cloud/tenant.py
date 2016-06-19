@@ -12,9 +12,13 @@ from cfme.web_ui import Region, SplitTable
 
 # Page specific locators
 list_page = Region(
+    # locators={
+    #     'tenant_table': SplitTable(header_data=('//div[@class="xhdr"]/table/tbody', 1),
+    #         body_data=('//div[@class="objbox"]/table/tbody', 1))
+    # },
     locators={
-        'tenant_table': SplitTable(header_data=('//div[@class="xhdr"]/table/tbody', 1),
-            body_data=('//div[@class="objbox"]/table/tbody', 1))
+        'security_group_table': SplitTable(header_data=('//table/thead', 1),
+                                           body_data=('//table/tbody', 1))
     },
     title='Cloud Tenants')
 

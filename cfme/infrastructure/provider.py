@@ -397,7 +397,7 @@ def get_all_providers(do_not_navigate=False):
     link_marker = "ems_infra"
     for page in paginator.pages():
         for title in sel.elements("//div[@id='quadicon']/../../../tr/td/a[contains(@href,"
-                "'{}/show')]".format(link_marker)):
+                "'{}')]".format(link_marker)):
             providers.add(sel.get_attribute(title, "title"))
     return providers
 
