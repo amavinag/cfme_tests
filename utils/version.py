@@ -173,8 +173,10 @@ class Version(object):
             vstring = ".".join(map(str, vstring))
         elif vstring:
             vstring = str(vstring).strip()
-        if vstring in ('master', 'latest', 'upstream') or 'euwe' in vstring:
+        if vstring in ('master', 'latest', 'upstream'):
             vstring = 'master'
+        if 'euwe' in vstring:
+            vstring = '5.7.0'
         if vstring == 'darga-3':
             vstring = '5.6.1'
         if vstring == 'darga-4.1':
