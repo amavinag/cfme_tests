@@ -3,6 +3,10 @@
 Mark a single test to run on sauce.
 
 """
+import base64
+import httplib
+import json
+
 from utils import browser
 from utils import conf
 
@@ -27,4 +31,22 @@ def pytest_runtest_setup(item):
 
 def pytest_runtest_teardown(item):
     if item.config.option.sauce:
+        jobid = browser.manager.browser.session_id
         browser.quit()
+        passed = item.rep_call.outcome == 'passed'
+        update_sauce_result(jobid, passed)
+
+
+def update_sauce_result(jobid, passed):
+    base64string = base64.encodestring('{user_name}:{access_key}'.format(
+        user_name=conf.credentials['saucelabs']['username'],
+        access_key=conf.credentials['saucelabs']['access_key']))[:-1]
+    body_content = json.dumps({"passed": passed})
+    connection = httplib.HTTPConnection("saucelabs.com")
+    connection.request('PUT', '/rest/v1/{user_name}/jobs/{job_id}'.format(
+        user_name=conf.credentials['saucelabs']['username'], job_id=jobid),
+                       body_content,
+                       headers={"Authorization": "Basic %s" % base64string})
+    result = connection.getresponse()
+    return result.status == 200
+
